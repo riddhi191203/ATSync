@@ -1,0 +1,1 @@
+start mongo db server = nodemon server.js
