@@ -3,6 +3,35 @@ const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const tokenBlacklistModel = require("../models/blacklist.model")
 
+const normalizeOrigin = (value = "") => value.trim().replace(/\/+$/, "").toLowerCase()
+const isLocalOrigin = (origin = "") => {
+    return origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")
+}
+const getBearerToken = (authHeader = "") => {
+    if (!authHeader || typeof authHeader !== "string") {
+        return null
+    }
+
+    const [ scheme, token ] = authHeader.split(" ")
+    if (scheme?.toLowerCase() !== "bearer" || !token) {
+        return null
+    }
+
+    return token.trim()
+}
+
+const getCookieOptions = (req) => {
+    const requestOrigin = normalizeOrigin(req.get("origin") || "")
+    const isCrossSite = Boolean(requestOrigin) && !isLocalOrigin(requestOrigin)
+
+    return {
+        httpOnly: true,
+        secure: isCrossSite,
+        sameSite: isCrossSite ? "none" : "lax",
+        maxAge: 24 * 60 * 60 * 1000
+    }
+}
+
 /**
  * @name registerUserController
  * @description register a new user, expects username, email and password in the request body
@@ -42,11 +71,12 @@ async function registerUserController(req, res) {
         { expiresIn: "1d" }
     )
 
-    res.cookie("token", token)
+    res.cookie("token", token, getCookieOptions(req))
 
 
     res.status(201).json({
         message: "User registered successfully",
+        token,
         user: {
             id: user._id,
             username: user.username,
@@ -88,13 +118,10 @@ async function loginUserController(req, res) {
         { expiresIn: "1d" }
     )
 
-    res.cookie("token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    })
+    res.cookie("token", token, getCookieOptions(req))
     res.status(200).json({
         message: "User loggedIn successfully.",
+        token,
         user: {
             id: user._id,
             username: user.username,
@@ -110,13 +137,13 @@ async function loginUserController(req, res) {
  * @access public
  */
 async function logoutUserController(req, res) {
-    const token = req.cookies.token
+    const token = req.cookies?.token || getBearerToken(req.get("authorization"))
 
     if (token) {
         await tokenBlacklistModel.create({ token })
     }
 
-    res.clearCookie("token")
+    res.clearCookie("token", getCookieOptions(req))
 
     res.status(200).json({
         message: "User logged out successfully"

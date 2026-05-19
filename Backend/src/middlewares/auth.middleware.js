@@ -1,11 +1,23 @@
 const jwt = require("jsonwebtoken")
 const tokenBlacklistModel = require("../models/blacklist.model")
 
+function getBearerToken(authHeader = "") {
+    if (!authHeader || typeof authHeader !== "string") {
+        return null
+    }
+
+    const [ scheme, token ] = authHeader.split(" ")
+    if (scheme?.toLowerCase() !== "bearer" || !token) {
+        return null
+    }
+
+    return token.trim()
+}
 
 
 async function authUser(req, res, next) {
 
-    const token = req.cookies.token
+    const token = req.cookies?.token || getBearerToken(req.get("authorization"))
 
     if (!token) {
         return res.status(401).json({

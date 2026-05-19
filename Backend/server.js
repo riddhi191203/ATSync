@@ -1,15 +1,10 @@
-require('dotenv').config()
-const app = require('./src/app')
-const connectToDB = require('./src/config/database')
-
-const PORT = process.env.PORT || 5000
+require("dotenv").config()
+const app = require("./src/app")
+const connectToDB = require("./src/config/database")
 
 connectToDB()
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`)
-})
-
-app.get('/', (req, res) => {
-  res.send("backend is running");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+    console.log(`Server is running on port ${PORT}`)
+    
 })

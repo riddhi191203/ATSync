@@ -17,6 +17,16 @@ const userSchema = new mongoose.Schema({
     password: {
         type: String,
         required: true
+    },
+
+    telegramId: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
+
+    telegramUsername: {
+        type: String
     }
 })
 

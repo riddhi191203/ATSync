@@ -1,560 +1,212 @@
-const { GoogleGenAI, Type } = require("@google/genai");
-const { z } = require("zod");
-const puppeteer = require("puppeteer");
+const { GoogleGenAI } = require("@google/genai")
+const { z } = require("zod")
+const { zodToJsonSchema } = require("zod-to-json-schema")
+const puppeteer = require("puppeteer")
+const path = require("path")
 
 const ai = new GoogleGenAI({
-  apiKey:
-    process.env.GOOGLE_GENAI_API_KEY ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY,
-});
+    apiKey: process.env.GOOGLE_GENAI_API_KEY
+})
 
+const ALLOWED_ROADMAP_DAYS = [ 7, 25, 45, 60 ]
+const ALLOWED_QUESTION_COUNTS = [ 10, 15, 20 ]
 
-const interviewQuestionSchema = z.object({
-  question: z.string(),
-  intention: z.string(),
-  answer: z.string(),
-});
+const normalizeOption = (value, allowedValues, fallback) => {
+    const numericValue = Number(value)
+    return allowedValues.includes(numericValue) ? numericValue : fallback
+}
 
-const skillGapSchema = z.object({
-  skill: z.string(),
-  severity: z.enum(["low", "medium", "high"]),
-});
+const fillQuestion = (questionType, index) => ({
+    question: `Sample ${questionType} question ${index + 1}`,
+    intention: `Assess ${questionType.toLowerCase()} readiness for this role.`,
+    answer: "Provide a concise, role-relevant answer with concrete examples."
+})
+
+const ensureQuestionLength = (questions, targetCount, questionType) => {
+    const safeQuestions = Array.isArray(questions) ? [ ...questions ] : []
+    const trimmed = safeQuestions.slice(0, targetCount)
+
+    while (trimmed.length < targetCount) {
+        trimmed.push(fillQuestion(questionType, trimmed.length))
+    }
+
+    return trimmed
+}
+
+const ensureRoadmapLength = (plan, targetDays) => {
+    const safePlan = Array.isArray(plan) ? [ ...plan ] : []
+    const trimmed = safePlan.slice(0, targetDays).map((item, index) => ({
+        day: index + 1,
+        focus: item?.focus || `Preparation focus for day ${index + 1}`,
+        tasks: Array.isArray(item?.tasks) && item.tasks.length > 0
+            ? item.tasks
+            : [
+                "Review role requirements and identify weak areas.",
+                "Practice role-specific questions and refine responses.",
+                "Summarize key learnings and plan next-day priorities."
+            ]
+    }))
+
+    while (trimmed.length < targetDays) {
+        const day = trimmed.length + 1
+        trimmed.push({
+            day,
+            focus: `Preparation focus for day ${day}`,
+            tasks: [
+                "Review role requirements and identify weak areas.",
+                "Practice role-specific questions and refine responses.",
+                "Summarize key learnings and plan next-day priorities."
+            ]
+        })
+    }
+
+    return trimmed
+}
+
 
 const interviewReportSchema = z.object({
-  title: z.string(),
-  matchScore: z.number(),
+    matchScore: z.number().describe("A score between 0 and 100 indicating how well the candidate's profile matches the job describe"),
+    technicalQuestions: z.array(z.object({
+        question: z.string().describe("The technical question can be asked in the interview"),
+        intention: z.string().describe("The intention of interviewer behind asking this question"),
+        answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
+    })).describe("Technical questions that can be asked in the interview along with their intention and how to answer them"),
+    behavioralQuestions: z.array(z.object({
+        question: z.string().describe("The technical question can be asked in the interview"),
+        intention: z.string().describe("The intention of interviewer behind asking this question"),
+        answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
+    })).describe("Behavioral questions that can be asked in the interview along with their intention and how to answer them"),
+    skillGaps: z.array(z.object({
+        skill: z.string().describe("The skill which the candidate is lacking"),
+        severity: z.enum([ "low", "medium", "high" ]).describe("The severity of this skill gap, i.e. how important is this skill for the job and how much it can impact the candidate's chances")
+    })).describe("List of skill gaps in the candidate's profile along with their severity"),
+    preparationPlan: z.array(z.object({
+        day: z.number().describe("The day number in the preparation plan, starting from 1"),
+        focus: z.string().describe("The main focus of this day in the preparation plan, e.g. data structures, system design, mock interviews etc."),
+        tasks: z.array(z.string()).describe("List of tasks to be done on this day to follow the preparation plan, e.g. read a specific book or article, solve a set of problems, watch a video etc.")
+    })).describe("A day-wise preparation plan for the candidate to follow in order to prepare for the interview effectively"),
+    title: z.string().describe("The title of the job for which the interview report is generated"),
+})
+
+async function generateInterviewReport({
+    resume,
+    selfDescription,
+    jobDescription,
+    roadmapDays,
+    technicalQuestionCount,
+    behavioralQuestionCount
+}) {
+
+    const targetRoadmapDays = normalizeOption(roadmapDays, ALLOWED_ROADMAP_DAYS, 25)
+    const targetTechnicalQuestions = normalizeOption(technicalQuestionCount, ALLOWED_QUESTION_COUNTS, 15)
+    const targetBehavioralQuestions = normalizeOption(behavioralQuestionCount, ALLOWED_QUESTION_COUNTS, 15)
+
+
+    const prompt = `Generate an interview report for a candidate with the following details:
+                        Resume: ${resume}
+                        Self Description: ${selfDescription}
+                        Job Description: ${jobDescription}
+
+                        Output requirements:
+                        - Return exactly ${targetTechnicalQuestions} items in technicalQuestions.
+                        - Return exactly ${targetBehavioralQuestions} items in behavioralQuestions.
+                        - Return exactly ${targetRoadmapDays} items in preparationPlan.
+                        - preparationPlan day values must be sequential integers starting at 1.
+                        - Ensure all arrays are complete and match these exact counts.
+`
+
+    const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: zodToJsonSchema(interviewReportSchema),
+        }
+    })
+
+    const report = JSON.parse(response.text)
+
+    report.technicalQuestions = ensureQuestionLength(report.technicalQuestions, targetTechnicalQuestions, "Technical")
+    report.behavioralQuestions = ensureQuestionLength(report.behavioralQuestions, targetBehavioralQuestions, "Behavioral")
+    report.preparationPlan = ensureRoadmapLength(report.preparationPlan, targetRoadmapDays)
+
+    return report
 
-  technicalQuestions: z.array(interviewQuestionSchema),
 
-  behavioralQuestions: z.array(interviewQuestionSchema),
-
-  skillGaps: z.array(skillGapSchema),
-});
-
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-
-const interviewReportResponseSchema = {
-  type: Type.OBJECT,
-  properties: {
-    title: { type: Type.STRING },
-    matchScore: { type: Type.NUMBER },
-    technicalQuestions: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          question: { type: Type.STRING },
-          intention: { type: Type.STRING },
-          answer: { type: Type.STRING },
-        },
-        required: ["question", "intention", "answer"],
-      },
-    },
-    behavioralQuestions: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          question: { type: Type.STRING },
-          intention: { type: Type.STRING },
-          answer: { type: Type.STRING },
-        },
-        required: ["question", "intention", "answer"],
-      },
-    },
-    skillGaps: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          skill: { type: Type.STRING },
-          severity: { type: Type.STRING, enum: ["low", "medium", "high"] },
-        },
-        required: ["skill", "severity"],
-      },
-    },
-  },
-  required: [
-    "title",
-    "matchScore",
-    "technicalQuestions",
-    "behavioralQuestions",
-    "skillGaps",
-  ],
-};
-
-
-
-const safeJsonParse = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
-
-const cleanJsonText = (text) => {
-  if (!text) return "";
-
-  const cleaned = text
-    .replace(/```json/g, "")
-    .replace(/```/g, "")
-    .trim();
-
-  const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    return cleaned;
-  }
-
-  return cleaned.slice(firstBrace, lastBrace + 1);
-};
-
-const extractResponseText = (response) => {
-  if (!response) return "";
-
-  if (typeof response.text === "function") {
-    return response.text();
-  }
-
-  if (typeof response.text === "string") {
-    return response.text;
-  }
-
-  if (typeof response.outputText === "string") {
-    return response.outputText;
-  }
-
-  const parts =
-    response.candidates?.flatMap((candidate) =>
-      candidate.content?.parts || []
-    ) || [];
-
-  return parts
-    .map((part) => part.text || "")
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-};
-
-const clampScore = (score) => {
-  const numeric = Number(score);
-
-  if (!Number.isFinite(numeric)) return 50;
-
-  return Math.max(0, Math.min(100, Math.round(numeric)));
-};
-
-const normalizeQuestions = (questions = []) => {
-  if (!Array.isArray(questions)) return [];
-
-  return questions.map((q) => ({
-    question: String(q.question || q.q || "").trim(),
-
-    intention: String(
-      q.intention ||
-      q.intent ||
-      "Understand candidate knowledge."
-    ).trim(),
-
-    answer: String(
-      q.answer ||
-      q.response ||
-      q.solution ||
-      "Use the STAR method or a concise technical explanation tailored to the role."
-    ).trim(),
-  })).filter((q) => q.question);
-};
-
-const normalizeSkillGaps = (gaps = []) => {
-  if (!Array.isArray(gaps)) return [];
-
-  return gaps.map((gap) => ({
-    skill: String(gap.skill || gap.name || "").trim(),
-
-    severity: ["low", "medium", "high"].includes(gap.severity)
-      ? gap.severity
-      : "medium",
-  })).filter((gap) => gap.skill);
-};
-
-const escapeHtml = (value = "") =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
-const paragraphsFromText = (text = "") =>
-  String(text)
-    .split(/\r?\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => `<p>${escapeHtml(line)}</p>`)
-    .join("\n");
-
-const buildFallbackResumeHtml = ({
-  resume,
-  selfDescription,
-  jobDescription,
-}) => `
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <style>
-      body {
-        color: #172033;
-        font-family: Arial, Helvetica, sans-serif;
-        font-size: 12px;
-        line-height: 1.45;
-      }
-
-      h1 {
-        border-bottom: 2px solid #172033;
-        font-size: 24px;
-        margin: 0 0 14px;
-        padding-bottom: 8px;
-      }
-
-      h2 {
-        color: #23365f;
-        font-size: 14px;
-        margin: 18px 0 8px;
-        text-transform: uppercase;
-      }
-
-      p {
-        margin: 0 0 7px;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>ATS Optimized Resume</h1>
-    <h2>Professional Summary</h2>
-    ${paragraphsFromText(selfDescription) || "<p>Candidate summary not provided.</p>"}
-    <h2>Resume Details</h2>
-    ${paragraphsFromText(resume) || "<p>Resume text was not available from the uploaded file.</p>"}
-    <h2>Target Role Alignment</h2>
-    ${paragraphsFromText(jobDescription) || "<p>Job description not provided.</p>"}
-  </body>
-</html>
-`;
-
-const extractHtml = (text = "") => {
-  const cleaned = String(text)
-    .replace(/```html/g, "")
-    .replace(/```/g, "")
-    .trim();
-
-  const match = cleaned.match(/<!doctype html[\s\S]*<\/html>|<html[\s\S]*<\/html>/i);
-
-  return match ? match[0] : cleaned;
-};
-
-const fallbackInterviewReport = () => ({
-  title: "Interview Report",
-
-  matchScore: 50,
-
-  technicalQuestions: [
-    {
-      question: "Explain your main technical projects.",
-      intention: "Evaluate project understanding.",
-      answer: "Discuss implementation, architecture, and challenges.",
-    },
-
-    {
-      question: "Explain REST APIs.",
-      intention: "Test backend fundamentals.",
-      answer: "Explain HTTP methods and client-server communication.",
-    },
-
-    {
-      question: "What is JWT authentication?",
-      intention: "Check authentication knowledge.",
-      answer: "Explain token-based authentication.",
-    },
-
-    {
-      question: "Explain React state management.",
-      intention: "Evaluate frontend concepts.",
-      answer: "Discuss state updates and component rendering.",
-    },
-
-    {
-      question: "What is database indexing?",
-      intention: "Evaluate database optimization knowledge.",
-      answer: "Explain how indexes improve query performance.",
-    },
-  ],
-
-  behavioralQuestions: [
-    {
-      question: "Tell me about yourself.",
-      intention: "Assess communication skills.",
-      answer: "Provide concise professional summary.",
-    },
-
-    {
-      question: "Describe a challenge you solved.",
-      intention: "Assess problem-solving ability.",
-      answer: "Explain challenge, action, and result.",
-    },
-
-    {
-      question: "How do you handle deadlines?",
-      intention: "Evaluate time management.",
-      answer: "Explain planning and prioritization.",
-    },
-
-    {
-      question: "Describe your teamwork experience.",
-      intention: "Evaluate collaboration skills.",
-      answer: "Discuss team communication and coordination.",
-    },
-
-    {
-      question: "Why do you want this role?",
-      intention: "Understand motivation.",
-      answer: "Connect career goals with role responsibilities.",
-    },
-  ],
-
-  skillGaps: [
-    {
-      skill: "System Design",
-      severity: "high",
-    },
-
-    {
-      skill: "Advanced Data Structures",
-      severity: "medium",
-    },
-
-    {
-      skill: "Cloud Deployment",
-      severity: "medium",
-    },
-  ],
-});
-
-const generateInterviewReport = async ({
-  resume,
-  selfDescription,
-  jobDescription,
-}) => {
-
-  const prompt = `
-Generate a professional interview report.
-
-RESUME:
-${resume}
-
-SELF DESCRIPTION:
-${selfDescription}
-
-JOB DESCRIPTION:
-${jobDescription}
-
-IMPORTANT RULES:
-- Return ONLY valid JSON
-- No markdown
-- No backticks
-- No explanations
-- Generate minimum:
-  - 5 technical questions
-  - 5 behavioral questions
-  - 3 skill gaps
-
-REQUIRED JSON FORMAT:
-
-{
-  "title": "string",
-  "matchScore": 75,
-
-  "technicalQuestions": [
-    {
-      "question": "string",
-      "intention": "string",
-      "answer": "string"
-    }
-  ],
-
-  "behavioralQuestions": [
-    {
-      "question": "string",
-      "intention": "string",
-      "answer": "string"
-    }
-  ],
-
-  "skillGaps": [
-    {
-      "skill": "string",
-      "severity": "low"
-    }
-  ]
 }
-`;
 
-  try {
+
+
+async function generatePdfFromHtml(htmlContent) {
+    process.env.PUPPETEER_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR || path.join(__dirname, "../../.cache/puppeteer")
+
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
+    let browser = null;
+    try {
+        browser = await puppeteer.launch({
+            executablePath,
+            headless: "new",
+            args: [ "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu" ]
+        })
+        const page = await browser.newPage();
+        await page.setContent(htmlContent, { waitUntil: "networkidle0" })
+
+        const pdfBuffer = await page.pdf({
+            format: "A4", margin: {
+                top: "20mm",
+                bottom: "20mm",
+                left: "15mm",
+                right: "15mm"
+            }
+        })
+
+        return pdfBuffer
+    } finally {
+        if (browser) {
+            try {
+                await browser.close()
+            } catch (err) {
+                console.error("Error closing browser:", err)
+            }
+        }
+    }
+}
+
+async function generateResumePdf({ resume, selfDescription, jobDescription }) {
+
+    const resumePdfSchema = z.object({
+        html: z.string().describe("The HTML content of the resume which can be converted to PDF using any library like puppeteer")
+    })
+
+    const prompt = `Generate resume for a candidate with the following details:
+                        Resume: ${resume}
+                        Self Description: ${selfDescription}
+                        Job Description: ${jobDescription}
+
+                        the response should be a JSON object with a single field "html" which contains the HTML content of the resume which can be converted to PDF using any library like puppeteer.
+                        The resume should be tailored for the given job description and should highlight the candidate's strengths and relevant experience. The HTML content should be well-formatted and structured, making it easy to read and visually appealing.
+                        The content of resume should be not sound like it's generated by AI and should be as close as possible to a real human-written resume.
+                        you can highlight the content using some colors or different font styles but the overall design should be simple and professional.
+                        The content should be ATS friendly, i.e. it should be easily parsable by ATS systems without losing important information.
+                        The resume should not be so lengthy, it should ideally be 1-2 pages long when converted to PDF. Focus on quality rather than quantity and make sure to include all the relevant information that can increase the candidate's chances of getting an interview call for the given job description.
+                    `
 
     const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: interviewReportResponseSchema,
-        temperature: 0.35,
-      },
-    });
-
-    const rawText = extractResponseText(response);
-
-    console.log("RAW GEMINI RESPONSE:");
-    console.log(rawText);
-
-    const cleanedText = cleanJsonText(rawText);
-
-    console.log("CLEANED RESPONSE:");
-    console.log(cleanedText);
-
-    const parsedData = safeJsonParse(cleanedText);
-
-    if (!parsedData) {
-      console.log("INVALID JSON RESPONSE");
-      return fallbackInterviewReport();
-    }
-
-    const finalReport = {
-      title: parsedData.title || "Interview Report",
-
-      matchScore: clampScore(parsedData.matchScore),
-
-      technicalQuestions: normalizeQuestions(
-        parsedData.technicalQuestions
-      ),
-
-      behavioralQuestions: normalizeQuestions(
-        parsedData.behavioralQuestions
-      ),
-
-      skillGaps: normalizeSkillGaps(
-        parsedData.skillGaps
-      ),
-    };
-
-    const validatedReport =
-      interviewReportSchema.parse(finalReport);
-
-    return validatedReport;
-
-  } catch (error) {
-
-    console.error("INTERVIEW REPORT ERROR:");
-    console.error(error);
-
-    return fallbackInterviewReport();
-  }
-};
-
-const generatePdfFromHtml = async (html) => {
-
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  try {
-
-    const page = await browser.newPage();
-
-    await page.setContent(html, {
-      waitUntil: "networkidle0",
-    });
-
-    return await page.pdf({
-      format: "A4",
-
-      margin: {
-        top: "20mm",
-        bottom: "20mm",
-        left: "15mm",
-        right: "15mm",
-      },
-    });
-
-  } finally {
-    await browser.close();
-  }
-};
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: zodToJsonSchema(resumePdfSchema),
+        }
+    })
 
 
-const generateResumePdf = async ({
-  resume,
-  selfDescription,
-  jobDescription,
-}) => {
+    const jsonContent = JSON.parse(response.text)
 
-  const prompt = `
-Generate a professional ATS-friendly resume as one complete HTML document.
+    const pdfBuffer = await generatePdfFromHtml(jsonContent.html)
 
-RESUME:
-${resume}
+    return pdfBuffer
 
-SELF DESCRIPTION:
-${selfDescription}
+}
 
-JOB DESCRIPTION:
-${jobDescription}
-
-IMPORTANT:
-- Return ONLY raw HTML
-- No markdown
-- No backticks
-- Include embedded CSS in a <style> tag
-- Use simple ATS-friendly sections and readable typography
-`;
-
-  try {
-
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "text/plain",
-        temperature: 0.35,
-      },
-    });
-
-    const html = extractHtml(extractResponseText(response));
-
-    if (!/<html[\s>]/i.test(html)) {
-      throw new Error("Invalid resume HTML");
-    }
-
-    return generatePdfFromHtml(html);
-
-  } catch (error) {
-
-    console.error("RESUME PDF ERROR:");
-    console.error(error);
-
-    return generatePdfFromHtml(
-      buildFallbackResumeHtml({
-        resume,
-        selfDescription,
-        jobDescription,
-      })
-    );
-  }
-};
-
-module.exports = {
-  generateInterviewReport,
-  generateResumePdf,
-};
+module.exports = { generateInterviewReport, generateResumePdf }
