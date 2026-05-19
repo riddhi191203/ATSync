@@ -1,329 +1,408 @@
-const { GoogleGenAI } = require('@google/genai')
-const { z } = require('zod')
-const { zodToJsonSchema } = require('zod-to-json-schema')
-const puppeteer = require('puppeteer')
+const { GoogleGenAI } = require("@google/genai");
+const { z } = require("zod");
+const puppeteer = require("puppeteer");
 
-const DEBUG_AI = String(process.env.DEBUG_AI_RESPONSES || '').toLowerCase() === 'true'
-const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY })
+const ai = new GoogleGenAI({
+  apiKey: process.env.GOOGLE_GENAI_API_KEY,
+});
+
 
 const interviewQuestionSchema = z.object({
-  question: z.string().describe('The question text.'),
-  intention: z.string().describe('The intention behind the question.'),
-  answer: z.string().describe('The recommended answer.'),
-})
+  question: z.string(),
+  intention: z.string(),
+  answer: z.string(),
+});
+
+const skillGapSchema = z.object({
+  skill: z.string(),
+  severity: z.enum(["low", "medium", "high"]),
+});
 
 const interviewReportSchema = z.object({
-  title: z.string().min(1).default('Untitled Position').describe('The title of the job for which the interview report is generated.'),
-  matchScore: z.preprocess((value) => {
-    if (typeof value === 'string') {
-      const parsed = Number(value.trim())
-      return Number.isFinite(parsed) ? parsed : 0
-    }
-    return value
-  }, z.number().min(0).max(100).default(0)).describe('A score between 0 and 100 indicating how well the profile matches the job description.'),
-  technicalQuestions: z.array(interviewQuestionSchema).default([]).describe('Technical questions with intention and answer.'),
-  behavioralQuestions: z.array(interviewQuestionSchema).default([]).describe('Behavioral questions with intention and answer.'),
-  skillGaps: z.array(z.object({
-    skill: z.string().describe('The missing skill'),
-    severity: z.enum(['low', 'medium', 'high']).describe('The severity of the skill gap'),
-  })).default([]).describe('List of skill gaps.'),
-})
+  title: z.string(),
+  matchScore: z.number(),
 
-const resumePdfSchema = z.object({ html: z.string().min(1).describe('Resume HTML content for PDF generation') })
+  technicalQuestions: z.array(interviewQuestionSchema),
 
-const normalizeArray = (items, normalizeFn) => {
-  if (Array.isArray(items)) {
-    return items.flatMap((item) => {
-      const normalized = normalizeFn(item)
-      return normalized ? [normalized] : []
-    })
-  }
+  behavioralQuestions: z.array(interviewQuestionSchema),
 
-  if (items && typeof items === 'object') {
-    const normalized = normalizeFn(items)
-    return normalized ? [normalized] : []
-  }
+  skillGaps: z.array(skillGapSchema),
+});
 
-  if (typeof items === 'string' && items.trim()) {
-    try {
-      const parsed = JSON.parse(items)
-      return normalizeArray(parsed, normalizeFn)
-    } catch {
-      return []
-    }
-  }
+const resumePdfSchema = z.object({
+  html: z.string(),
+});
 
-  return []
-}
 
-const parseQuestionString = (text) => {
-  if (typeof text !== 'string') return null
-  const trimmed = text.trim()
-  if (!trimmed) return null
 
-  const questionMatch = trimmed.match(/(?:question|q|prompt)\s*[:\-]\s*(.+?)(?:\n|$)/i)
-  const answerMatch = trimmed.match(/(?:answer|response|recommendation|solution|advice|explanation)\s*[:\-]\s*(.+?)(?:\n|$)/i)
-  const intentionMatch = trimmed.match(/(?:intention|intent|purpose|reason|goal)\s*[:\-]\s*(.+?)(?:\n|$)/i)
-
-  const question = questionMatch?.[1]?.trim() || trimmed.split(/\n/)[0]?.trim()
-  const answer = answerMatch?.[1]?.trim() || trimmed.split(/\n/).slice(1).join(' ').trim()
-  const intention = intentionMatch?.[1]?.trim() || 'Clarify the purpose of this question.'
-
-  if (!question || !answer) return null
-  return { question, intention, answer }
-}
-
-const normalizeQuestion = (item) => {
-  if (!item) return null
-  if (typeof item === 'string') {
-    return parseQuestionString(item)
-  }
-  if (typeof item !== 'object') return null
-
-  const question = String(item.question ?? item.q ?? item.prompt ?? item.text ?? item.title ?? item.questionText ?? item.question_text ?? '').trim()
-  const answer = String(item.answer ?? item.response ?? item.recommendation ?? item.solution ?? item.advice ?? item.explanation ?? item.answerText ?? item.answer_text ?? '').trim()
-  const intention = String(item.intention ?? item.intent ?? item.purpose ?? item.reason ?? item.goal ?? '').trim()
-
-  if (!question || !answer) {
-    const rawText = Object.values(item)
-      .filter((value) => typeof value === 'string')
-      .join(' \n ')
-    return parseQuestionString(rawText)
-  }
-
-  return {
-    question,
-    intention: intention || 'Clarify the purpose of this question.',
-    answer,
-  }
-}
-
-const normalizeSkillGap = (item) => {
-  if (!item) return null
-  if (typeof item === 'string') {
-    const parts = item.split(/[:,\-–]/).map((part) => part.trim()).filter(Boolean)
-    const skill = parts[0] || ''
-    const severity = parts.find((part) => ['low', 'medium', 'high'].includes(part.toLowerCase())) || ''
-    return skill && severity ? { skill, severity: severity.toLowerCase() } : null
-  }
-
-  if (typeof item !== 'object') return null
-  const skill = String(item.skill ?? item.name ?? item.topic ?? item.area ?? item.subject ?? '').trim()
-  const severity = String(item.severity ?? item.level ?? item.priority ?? item.severityLevel ?? item.importance ?? '').trim().toLowerCase()
-  return skill && ['low', 'medium', 'high'].includes(severity) ? { skill, severity } : null
-}
-
-const getField = (data, key, aliases = []) => {
-  if (!data || typeof data !== 'object') return undefined
-  if (data[key] !== undefined) return data[key]
-  for (const alias of aliases) {
-    if (data[alias] !== undefined) return data[alias]
-  }
-
-  for (const nestedKey of ['data', 'result', 'output']) {
-    const nested = data[nestedKey]
-    if (nested && typeof nested === 'object') {
-      const nestedValue = getField(nested, key, aliases)
-      if (nestedValue !== undefined) return nestedValue
-    }
-  }
-
-  return undefined
-}
-
-const safeJsonParse = (value) => {
-  if (typeof value !== 'string') return undefined
+const safeJsonParse = (text) => {
   try {
-    return JSON.parse(value)
+    return JSON.parse(text);
   } catch {
-    return undefined
+    return null;
   }
-}
+};
 
-const extractJsonFromText = (text) => {
-  if (typeof text !== 'string') return undefined
-  const trimmed = text.trim()
-  if (!trimmed) return undefined
+const cleanJsonText = (text) => {
+  if (!text) return "";
 
-  const direct = safeJsonParse(trimmed)
-  if (direct !== undefined) return direct
+  return text
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
+};
 
-  const objectStart = trimmed.indexOf('{')
-  const objectEnd = trimmed.lastIndexOf('}')
-  if (objectStart !== -1 && objectEnd > objectStart) {
-    const candidate = trimmed.slice(objectStart, objectEnd + 1)
-    const parsed = safeJsonParse(candidate)
-    if (parsed !== undefined) return parsed
-  }
+const normalizeQuestions = (questions = []) => {
+  if (!Array.isArray(questions)) return [];
 
-  const arrayStart = trimmed.indexOf('[')
-  const arrayEnd = trimmed.lastIndexOf(']')
-  if (arrayStart !== -1 && arrayEnd > arrayStart) {
-    const candidate = trimmed.slice(arrayStart, arrayEnd + 1)
-    const parsed = safeJsonParse(candidate)
-    if (parsed !== undefined) return parsed
-  }
+  return questions.map((q) => ({
+    question: String(q.question || q.q || "").trim(),
 
-  return undefined
-}
+    intention: String(
+      q.intention ||
+      q.intent ||
+      "Understand candidate knowledge."
+    ).trim(),
 
-const extractJson = (response) => {
-  if (!response) throw new Error('AI response is empty.')
+    answer: String(
+      q.answer ||
+      q.response ||
+      q.solution ||
+      ""
+    ).trim(),
+  }));
+};
 
-  if (typeof response === 'string' && response.trim()) {
-    const parsed = safeJsonParse(response.trim())
-    if (parsed !== undefined) return parsed
-  }
+const normalizeSkillGaps = (gaps = []) => {
+  if (!Array.isArray(gaps)) return [];
 
-  if (typeof response.text === 'string' && response.text.trim()) {
-    const parsed = extractJsonFromText(response.text)
-    if (parsed !== undefined) return parsed
-  }
+  return gaps.map((gap) => ({
+    skill: String(gap.skill || "").trim(),
 
-  if (typeof response.outputText === 'string' && response.outputText.trim()) {
-    const parsed = extractJsonFromText(response.outputText)
-    if (parsed !== undefined) return parsed
-  }
+    severity: ["low", "medium", "high"].includes(gap.severity)
+      ? gap.severity
+      : "medium",
+  }));
+};
 
-  const parseRaw = (raw) => {
-    if (typeof raw === 'string' && raw.trim()) {
-      const parsed = extractJsonFromText(raw)
-      return parsed !== undefined ? parsed : raw
-    }
+const fallbackInterviewReport = () => ({
+  title: "Interview Report",
 
-    if (Array.isArray(raw)) {
-      const rawText = raw
-        .map((item) => {
-          if (typeof item === 'string') return item
-          if (Array.isArray(item?.content)) {
-            return item.content.map((chunk) => (typeof chunk === 'string' ? chunk : chunk?.text)).filter(Boolean).join('')
-          }
-          if (item?.content && typeof item.content === 'string') return item.content
-          if (item?.text && typeof item.text === 'string') return item.text
-          return ''
-        })
-        .join('')
-      const parsed = extractJsonFromText(rawText)
-      return parsed !== undefined ? parsed : raw
-    }
+  matchScore: 50,
 
-    if (raw && typeof raw === 'object') {
-      if (raw.content) return parseRaw(raw.content)
-      if (raw.output) return parseRaw(raw.output)
-      if (raw.text && typeof raw.text === 'string') {
-        const parsed = extractJsonFromText(raw.text)
-        return parsed !== undefined ? parsed : raw
-      }
-      return raw
-    }
-
-    return raw
-  }
-
-  if (response.output !== undefined) {
-    return parseRaw(response.output)
-  }
-
-  if (response?.response !== undefined) {
-    return parseRaw(response.response)
-  }
-
-  throw new Error('AI response could not be parsed.')
-}
-
-const debugResponse = (label, response) => {
-  if (!DEBUG_AI) return
-  console.debug(`[AI DEBUG] ${label}:`, JSON.stringify(response, null, 2))
-}
-
-const ensureInterviewReport = (data) => {
-  const raw = data?.interviewReport ?? data?.report ?? data
-  const parsed = interviewReportSchema.safeParse(raw)
-  const technicalQuestions = normalizeArray(
-    getField(raw, 'technicalQuestions', ['technical_questions', 'technical', 'techQuestions', 'tech_questions', 'interviewQuestions', 'interview_questions']),
-    normalizeQuestion,
-  )
-  const behavioralQuestions = normalizeArray(
-    getField(raw, 'behavioralQuestions', ['behavioral_questions', 'behavioural_questions', 'behavioral', 'behavior_questions', 'behavior_questions']),
-    normalizeQuestion,
-  )
-  const genericQuestions = normalizeArray(
-    getField(raw, 'questions', ['questions', 'qa', 'interviewQuestions', 'interview_questions']),
-    normalizeQuestion,
-  )
-  const normalizedTechnicalQuestions = technicalQuestions.length > 0 ? technicalQuestions : genericQuestions
-  const normalizedBehavioralQuestions = behavioralQuestions.length > 0 ? behavioralQuestions : genericQuestions
-  const normalizedSkillGaps = normalizeArray(
-    getField(raw, 'skillGaps', ['skill_gaps', 'gaps', 'skills', 'missingSkills', 'skillGap', 'skill_gap', 'missing_skills']),
-    normalizeSkillGap,
-  )
-
-  if (parsed.success) {
-    return interviewReportSchema.parse({
-      ...parsed.data,
-      technicalQuestions: normalizedTechnicalQuestions.length > 0 ? normalizedTechnicalQuestions : parsed.data.technicalQuestions,
-      behavioralQuestions: normalizedBehavioralQuestions.length > 0 ? normalizedBehavioralQuestions : parsed.data.behavioralQuestions,
-      skillGaps: normalizedSkillGaps.length > 0 ? normalizedSkillGaps : parsed.data.skillGaps,
-    })
-  }
-
-  return interviewReportSchema.parse({
-    title: String(getField(raw, 'title', ['jobTitle', 'reportTitle', 'job_title', 'report_title']) ?? 'Untitled Position').trim() || 'Untitled Position',
-    matchScore: typeof getField(raw, 'matchScore', ['score', 'match_score']) === 'number'
-      ? getField(raw, 'matchScore', ['score', 'match_score'])
-      : Number(getField(raw, 'matchScore', ['score', 'match_score'])) || 0,
-    technicalQuestions: normalizedTechnicalQuestions,
-    behavioralQuestions: normalizedBehavioralQuestions,
-    skillGaps: normalizedSkillGaps,
-  })
-}
-
-const generateInterviewReport = async ({ resume, selfDescription, jobDescription }) => {
-  const prompt = `Generate an interview report for a candidate with the following details:\nResume: ${resume}\nSelf Description: ${selfDescription}\nJob Description: ${jobDescription}\n\nReturn only JSON matching this schema:\n{\n  "title": "string",\n  "matchScore": 0,\n  "technicalQuestions": [{ "question": "string", "intention": "string", "answer": "string" }],\n  "behavioralQuestions": [{ "question": "string", "intention": "string", "answer": "string" }],\n  "skillGaps": [{ "skill": "string", "severity": "low|medium|high" }]\n}\nIf the model uses alternate property names, respond with the same data under one of these aliases: technical_questions, behavioral_questions, questions, skill_gaps, missingSkills. Do not include markdown, code fences, backticks, or explanation.`
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: zodToJsonSchema(interviewReportSchema),
+  technicalQuestions: [
+    {
+      question: "Explain your main technical projects.",
+      intention: "Evaluate project understanding.",
+      answer: "Discuss implementation, architecture, and challenges.",
     },
-  })
 
-  debugResponse('Interview report response', response)
+    {
+      question: "Explain REST APIs.",
+      intention: "Test backend fundamentals.",
+      answer: "Explain HTTP methods and client-server communication.",
+    },
 
-  const reportData = extractJson(response)
-  return ensureInterviewReport(reportData)
+    {
+      question: "What is JWT authentication?",
+      intention: "Check authentication knowledge.",
+      answer: "Explain token-based authentication.",
+    },
+
+    {
+      question: "Explain React state management.",
+      intention: "Evaluate frontend concepts.",
+      answer: "Discuss state updates and component rendering.",
+    },
+
+    {
+      question: "What is database indexing?",
+      intention: "Evaluate database optimization knowledge.",
+      answer: "Explain how indexes improve query performance.",
+    },
+  ],
+
+  behavioralQuestions: [
+    {
+      question: "Tell me about yourself.",
+      intention: "Assess communication skills.",
+      answer: "Provide concise professional summary.",
+    },
+
+    {
+      question: "Describe a challenge you solved.",
+      intention: "Assess problem-solving ability.",
+      answer: "Explain challenge, action, and result.",
+    },
+
+    {
+      question: "How do you handle deadlines?",
+      intention: "Evaluate time management.",
+      answer: "Explain planning and prioritization.",
+    },
+
+    {
+      question: "Describe your teamwork experience.",
+      intention: "Evaluate collaboration skills.",
+      answer: "Discuss team communication and coordination.",
+    },
+
+    {
+      question: "Why do you want this role?",
+      intention: "Understand motivation.",
+      answer: "Connect career goals with role responsibilities.",
+    },
+  ],
+
+  skillGaps: [
+    {
+      skill: "System Design",
+      severity: "high",
+    },
+
+    {
+      skill: "Advanced Data Structures",
+      severity: "medium",
+    },
+
+    {
+      skill: "Cloud Deployment",
+      severity: "medium",
+    },
+  ],
+});
+
+const generateInterviewReport = async ({
+  resume,
+  selfDescription,
+  jobDescription,
+}) => {
+
+  const prompt = `
+Generate a professional interview report.
+
+RESUME:
+${resume}
+
+SELF DESCRIPTION:
+${selfDescription}
+
+JOB DESCRIPTION:
+${jobDescription}
+
+IMPORTANT RULES:
+- Return ONLY valid JSON
+- No markdown
+- No backticks
+- No explanations
+- Generate minimum:
+  - 5 technical questions
+  - 5 behavioral questions
+  - 3 skill gaps
+
+REQUIRED JSON FORMAT:
+
+{
+  "title": "string",
+  "matchScore": 75,
+
+  "technicalQuestions": [
+    {
+      "question": "string",
+      "intention": "string",
+      "answer": "string"
+    }
+  ],
+
+  "behavioralQuestions": [
+    {
+      "question": "string",
+      "intention": "string",
+      "answer": "string"
+    }
+  ],
+
+  "skillGaps": [
+    {
+      "skill": "string",
+      "severity": "low"
+    }
+  ]
 }
+`;
+
+  try {
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+    });
+
+    let rawText = "";
+
+    if (typeof response.text === "function") {
+      rawText = response.text();
+    }
+    else if (typeof response.text === "string") {
+      rawText = response.text;
+    }
+    else if (response.outputText) {
+      rawText = response.outputText;
+    }
+
+    console.log("RAW GEMINI RESPONSE:");
+    console.log(rawText);
+
+    const cleanedText = cleanJsonText(rawText);
+
+    console.log("CLEANED RESPONSE:");
+    console.log(cleanedText);
+
+    const parsedData = safeJsonParse(cleanedText);
+
+    if (!parsedData) {
+      console.log("INVALID JSON RESPONSE");
+      return fallbackInterviewReport();
+    }
+
+    const finalReport = {
+      title: parsedData.title || "Interview Report",
+
+      matchScore:
+        typeof parsedData.matchScore === "number"
+          ? parsedData.matchScore
+          : 50,
+
+      technicalQuestions: normalizeQuestions(
+        parsedData.technicalQuestions
+      ),
+
+      behavioralQuestions: normalizeQuestions(
+        parsedData.behavioralQuestions
+      ),
+
+      skillGaps: normalizeSkillGaps(
+        parsedData.skillGaps
+      ),
+    };
+
+    const validatedReport =
+      interviewReportSchema.parse(finalReport);
+
+    return validatedReport;
+
+  } catch (error) {
+
+    console.error("INTERVIEW REPORT ERROR:");
+    console.error(error);
+
+    return fallbackInterviewReport();
+  }
+};
 
 const generatePdfFromHtml = async (html) => {
-  const browser = await puppeteer.launch()
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
   try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle0' })
-    return await page.pdf({ format: 'A4', margin: { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' } })
+
+    const page = await browser.newPage();
+
+    await page.setContent(html, {
+      waitUntil: "networkidle0",
+    });
+
+    return await page.pdf({
+      format: "A4",
+
+      margin: {
+        top: "20mm",
+        bottom: "20mm",
+        left: "15mm",
+        right: "15mm",
+      },
+    });
+
   } finally {
-    await browser.close()
+    await browser.close();
   }
+};
+
+
+const generateResumePdf = async ({
+  resume,
+  selfDescription,
+  jobDescription,
+}) => {
+
+  const prompt = `
+Generate a professional ATS-friendly HTML resume.
+
+RESUME:
+${resume}
+
+SELF DESCRIPTION:
+${selfDescription}
+
+JOB DESCRIPTION:
+${jobDescription}
+
+IMPORTANT:
+- Return ONLY JSON
+- No markdown
+- No backticks
+
+FORMAT:
+{
+  "html": "<html>...</html>"
 }
+`;
 
-const generateResumePdf = async ({ resume, selfDescription, jobDescription }) => {
-  const prompt = `Generate a resume for a candidate with the following details:\nResume: ${resume}\nSelf Description: ${selfDescription}\nJob Description: ${jobDescription}\n\nReturn only JSON with one field:\n{\"html\": \"string\"}\nThe HTML should be clean, professional, ATS-friendly, and suitable for a 1-2 page PDF.`
+  try {
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: zodToJsonSchema(resumePdfSchema),
-    },
-  })
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+    });
 
-  debugResponse('Resume PDF response', response)
+    let rawText = "";
 
-  const resumeData = extractJson(response)
-  const { html } = resumePdfSchema.parse(resumeData)
-  return generatePdfFromHtml(html)
-}
+    if (typeof response.text === "function") {
+      rawText = response.text();
+    }
+    else if (typeof response.text === "string") {
+      rawText = response.text;
+    }
+    else if (response.outputText) {
+      rawText = response.outputText;
+    }
 
-module.exports = { generateInterviewReport, generateResumePdf }
+    const cleanedText = cleanJsonText(rawText);
+
+    const parsedData = safeJsonParse(cleanedText);
+
+    if (!parsedData?.html) {
+      throw new Error("Invalid resume HTML");
+    }
+
+    const validated =
+      resumePdfSchema.parse(parsedData);
+
+    return generatePdfFromHtml(validated.html);
+
+  } catch (error) {
+
+    console.error("RESUME PDF ERROR:");
+    console.error(error);
+
+    throw error;
+  }
+};
+
+module.exports = {
+  generateInterviewReport,
+  generateResumePdf,
+};
