@@ -69,24 +69,48 @@ export const useInterview = () => {
   }, [setLoading, setReports])
 
   const getResumePdf = async (interviewReportId) => {
-    if (!interviewReportId) {
-      throw new Error('Resume download requires a report ID.')
-    }
 
-    return withLoading(setLoading, async () => {
-      const response = await generateResumePdf({ interviewReportId })
-      const blob = new Blob([response], { type: 'application/pdf' })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-
-      link.href = url
-      link.setAttribute('download', `resume_${interviewReportId}.pdf`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-    })
+  if (!interviewReportId) {
+    throw new Error('Resume download requires a report ID.')
   }
+
+  return withLoading(setLoading, async () => {
+
+    const response = await generateResumePdf({
+      interviewReportId
+    })
+
+    const blob = new Blob(
+      [response.data],
+      {
+        type: 'application/pdf'
+      }
+    )
+
+    const url =
+      window.URL.createObjectURL(blob)
+
+    const link =
+      document.createElement('a')
+
+    link.href = url
+
+    link.setAttribute(
+      'download',
+      `resume_${interviewReportId}.pdf`
+    )
+
+    document.body.appendChild(link)
+
+    link.click()
+
+    link.remove()
+
+    window.URL.revokeObjectURL(url)
+
+    return true
+  })
+}
 
   useEffect(() => {
     if (interviewId) {
