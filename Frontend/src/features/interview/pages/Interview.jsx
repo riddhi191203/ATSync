@@ -311,35 +311,7 @@ const Interview = () => {
 
               try {
 
-                const response = await getResumePdf(interviewId)
-
-                const blob = new Blob(
-                  [response.data],
-                  {
-                    type: "application/pdf"
-                  }
-                )
-
-                const url =
-                  window.URL.createObjectURL(blob)
-
-                const link =
-                  document.createElement("a")
-
-                link.href = url
-
-                link.setAttribute(
-                  "download",
-                  `resume_${interviewId}.pdf`
-                )
-
-                document.body.appendChild(link)
-
-                link.click()
-
-                link.remove()
-
-                window.URL.revokeObjectURL(url)
+                await getResumePdf(interviewId)
 
               } catch (error) {
 

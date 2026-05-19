@@ -235,17 +235,20 @@ async function generateResumePdfController(req, res, next) {
     const { interviewReportId } = req.params
 
     const interviewReport =
-      await interviewReportModel.findById(interviewReportId)
+      await interviewReportModel.findOne({
+        _id: interviewReportId,
+        user: req.user.id,
+      })
 
     if (!interviewReport) {
       return sendError(res, 404, 'Interview report not found.')
     }
 
-    const pdfBuffer = await generateResumePdf({
+    const pdfBuffer = Buffer.from(await generateResumePdf({
       resume: interviewReport.resume,
       selfDescription: interviewReport.selfDescription,
       jobDescription: interviewReport.jobDescription,
-    })
+    }))
 
     if (!pdfBuffer) {
       return sendError(

@@ -1,9 +1,12 @@
-const { GoogleGenAI } = require("@google/genai");
+const { GoogleGenAI, Type } = require("@google/genai");
 const { z } = require("zod");
 const puppeteer = require("puppeteer");
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.GOOGLE_GENAI_API_KEY,
+  apiKey:
+    process.env.GOOGLE_GENAI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY,
 });
 
 
@@ -29,9 +32,57 @@ const interviewReportSchema = z.object({
   skillGaps: z.array(skillGapSchema),
 });
 
-const resumePdfSchema = z.object({
-  html: z.string(),
-});
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+
+const interviewReportResponseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING },
+    matchScore: { type: Type.NUMBER },
+    technicalQuestions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING },
+          intention: { type: Type.STRING },
+          answer: { type: Type.STRING },
+        },
+        required: ["question", "intention", "answer"],
+      },
+    },
+    behavioralQuestions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING },
+          intention: { type: Type.STRING },
+          answer: { type: Type.STRING },
+        },
+        required: ["question", "intention", "answer"],
+      },
+    },
+    skillGaps: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          skill: { type: Type.STRING },
+          severity: { type: Type.STRING, enum: ["low", "medium", "high"] },
+        },
+        required: ["skill", "severity"],
+      },
+    },
+  },
+  required: [
+    "title",
+    "matchScore",
+    "technicalQuestions",
+    "behavioralQuestions",
+    "skillGaps",
+  ],
+};
 
 
 
@@ -46,10 +97,54 @@ const safeJsonParse = (text) => {
 const cleanJsonText = (text) => {
   if (!text) return "";
 
-  return text
+  const cleaned = text
     .replace(/```json/g, "")
     .replace(/```/g, "")
     .trim();
+
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return cleaned;
+  }
+
+  return cleaned.slice(firstBrace, lastBrace + 1);
+};
+
+const extractResponseText = (response) => {
+  if (!response) return "";
+
+  if (typeof response.text === "function") {
+    return response.text();
+  }
+
+  if (typeof response.text === "string") {
+    return response.text;
+  }
+
+  if (typeof response.outputText === "string") {
+    return response.outputText;
+  }
+
+  const parts =
+    response.candidates?.flatMap((candidate) =>
+      candidate.content?.parts || []
+    ) || [];
+
+  return parts
+    .map((part) => part.text || "")
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+};
+
+const clampScore = (score) => {
+  const numeric = Number(score);
+
+  if (!Number.isFinite(numeric)) return 50;
+
+  return Math.max(0, Math.min(100, Math.round(numeric)));
 };
 
 const normalizeQuestions = (questions = []) => {
@@ -68,21 +163,96 @@ const normalizeQuestions = (questions = []) => {
       q.answer ||
       q.response ||
       q.solution ||
-      ""
+      "Use the STAR method or a concise technical explanation tailored to the role."
     ).trim(),
-  }));
+  })).filter((q) => q.question);
 };
 
 const normalizeSkillGaps = (gaps = []) => {
   if (!Array.isArray(gaps)) return [];
 
   return gaps.map((gap) => ({
-    skill: String(gap.skill || "").trim(),
+    skill: String(gap.skill || gap.name || "").trim(),
 
     severity: ["low", "medium", "high"].includes(gap.severity)
       ? gap.severity
       : "medium",
-  }));
+  })).filter((gap) => gap.skill);
+};
+
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const paragraphsFromText = (text = "") =>
+  String(text)
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
+    .join("\n");
+
+const buildFallbackResumeHtml = ({
+  resume,
+  selfDescription,
+  jobDescription,
+}) => `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        color: #172033;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      h1 {
+        border-bottom: 2px solid #172033;
+        font-size: 24px;
+        margin: 0 0 14px;
+        padding-bottom: 8px;
+      }
+
+      h2 {
+        color: #23365f;
+        font-size: 14px;
+        margin: 18px 0 8px;
+        text-transform: uppercase;
+      }
+
+      p {
+        margin: 0 0 7px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ATS Optimized Resume</h1>
+    <h2>Professional Summary</h2>
+    ${paragraphsFromText(selfDescription) || "<p>Candidate summary not provided.</p>"}
+    <h2>Resume Details</h2>
+    ${paragraphsFromText(resume) || "<p>Resume text was not available from the uploaded file.</p>"}
+    <h2>Target Role Alignment</h2>
+    ${paragraphsFromText(jobDescription) || "<p>Job description not provided.</p>"}
+  </body>
+</html>
+`;
+
+const extractHtml = (text = "") => {
+  const cleaned = String(text)
+    .replace(/```html/g, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const match = cleaned.match(/<!doctype html[\s\S]*<\/html>|<html[\s\S]*<\/html>/i);
+
+  return match ? match[0] : cleaned;
 };
 
 const fallbackInterviewReport = () => ({
@@ -234,21 +404,16 @@ REQUIRED JSON FORMAT:
   try {
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: interviewReportResponseSchema,
+        temperature: 0.35,
+      },
     });
 
-    let rawText = "";
-
-    if (typeof response.text === "function") {
-      rawText = response.text();
-    }
-    else if (typeof response.text === "string") {
-      rawText = response.text;
-    }
-    else if (response.outputText) {
-      rawText = response.outputText;
-    }
+    const rawText = extractResponseText(response);
 
     console.log("RAW GEMINI RESPONSE:");
     console.log(rawText);
@@ -268,10 +433,7 @@ REQUIRED JSON FORMAT:
     const finalReport = {
       title: parsedData.title || "Interview Report",
 
-      matchScore:
-        typeof parsedData.matchScore === "number"
-          ? parsedData.matchScore
-          : 50,
+      matchScore: clampScore(parsedData.matchScore),
 
       technicalQuestions: normalizeQuestions(
         parsedData.technicalQuestions
@@ -339,7 +501,7 @@ const generateResumePdf = async ({
 }) => {
 
   const prompt = `
-Generate a professional ATS-friendly HTML resume.
+Generate a professional ATS-friendly resume as one complete HTML document.
 
 RESUME:
 ${resume}
@@ -351,54 +513,44 @@ JOB DESCRIPTION:
 ${jobDescription}
 
 IMPORTANT:
-- Return ONLY JSON
+- Return ONLY raw HTML
 - No markdown
 - No backticks
-
-FORMAT:
-{
-  "html": "<html>...</html>"
-}
+- Include embedded CSS in a <style> tag
+- Use simple ATS-friendly sections and readable typography
 `;
 
   try {
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
+      config: {
+        responseMimeType: "text/plain",
+        temperature: 0.35,
+      },
     });
 
-    let rawText = "";
+    const html = extractHtml(extractResponseText(response));
 
-    if (typeof response.text === "function") {
-      rawText = response.text();
-    }
-    else if (typeof response.text === "string") {
-      rawText = response.text;
-    }
-    else if (response.outputText) {
-      rawText = response.outputText;
-    }
-
-    const cleanedText = cleanJsonText(rawText);
-
-    const parsedData = safeJsonParse(cleanedText);
-
-    if (!parsedData?.html) {
+    if (!/<html[\s>]/i.test(html)) {
       throw new Error("Invalid resume HTML");
     }
 
-    const validated =
-      resumePdfSchema.parse(parsedData);
-
-    return generatePdfFromHtml(validated.html);
+    return generatePdfFromHtml(html);
 
   } catch (error) {
 
     console.error("RESUME PDF ERROR:");
     console.error(error);
 
-    throw error;
+    return generatePdfFromHtml(
+      buildFallbackResumeHtml({
+        resume,
+        selfDescription,
+        jobDescription,
+      })
+    );
   }
 };
 
