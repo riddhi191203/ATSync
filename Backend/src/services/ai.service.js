@@ -239,8 +239,6 @@ const debugResponse = (label, response) => {
 const ensureInterviewReport = (data) => {
   const raw = data?.interviewReport ?? data?.report ?? data
   const parsed = interviewReportSchema.safeParse(raw)
-  if (parsed.success) return parsed.data
-
   const technicalQuestions = normalizeArray(
     getField(raw, 'technicalQuestions', ['technical_questions', 'technical', 'techQuestions', 'tech_questions', 'interviewQuestions', 'interview_questions']),
     normalizeQuestion,
@@ -253,9 +251,21 @@ const ensureInterviewReport = (data) => {
     getField(raw, 'questions', ['questions', 'qa', 'interviewQuestions', 'interview_questions']),
     normalizeQuestion,
   )
-
   const normalizedTechnicalQuestions = technicalQuestions.length > 0 ? technicalQuestions : genericQuestions
   const normalizedBehavioralQuestions = behavioralQuestions.length > 0 ? behavioralQuestions : genericQuestions
+  const normalizedSkillGaps = normalizeArray(
+    getField(raw, 'skillGaps', ['skill_gaps', 'gaps', 'skills', 'missingSkills', 'skillGap', 'skill_gap', 'missing_skills']),
+    normalizeSkillGap,
+  )
+
+  if (parsed.success) {
+    return interviewReportSchema.parse({
+      ...parsed.data,
+      technicalQuestions: normalizedTechnicalQuestions.length > 0 ? normalizedTechnicalQuestions : parsed.data.technicalQuestions,
+      behavioralQuestions: normalizedBehavioralQuestions.length > 0 ? normalizedBehavioralQuestions : parsed.data.behavioralQuestions,
+      skillGaps: normalizedSkillGaps.length > 0 ? normalizedSkillGaps : parsed.data.skillGaps,
+    })
+  }
 
   return interviewReportSchema.parse({
     title: String(getField(raw, 'title', ['jobTitle', 'reportTitle', 'job_title', 'report_title']) ?? 'Untitled Position').trim() || 'Untitled Position',
@@ -264,7 +274,7 @@ const ensureInterviewReport = (data) => {
       : Number(getField(raw, 'matchScore', ['score', 'match_score'])) || 0,
     technicalQuestions: normalizedTechnicalQuestions,
     behavioralQuestions: normalizedBehavioralQuestions,
-    skillGaps: normalizeArray(getField(raw, 'skillGaps', ['skill_gaps', 'gaps', 'skills', 'missingSkills', 'skillGap', 'skill_gap', 'missing_skills']), normalizeSkillGap),
+    skillGaps: normalizedSkillGaps,
   })
 }
 
