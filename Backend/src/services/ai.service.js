@@ -119,6 +119,15 @@ const getField = (data, key, aliases = []) => {
   for (const alias of aliases) {
     if (data[alias] !== undefined) return data[alias]
   }
+
+  for (const nestedKey of ['data', 'result', 'output']) {
+    const nested = data[nestedKey]
+    if (nested && typeof nested === 'object') {
+      const nestedValue = getField(nested, key, aliases)
+      if (nestedValue !== undefined) return nestedValue
+    }
+  }
+
   return undefined
 }
 
@@ -245,13 +254,16 @@ const ensureInterviewReport = (data) => {
     normalizeQuestion,
   )
 
+  const normalizedTechnicalQuestions = technicalQuestions.length > 0 ? technicalQuestions : genericQuestions
+  const normalizedBehavioralQuestions = behavioralQuestions.length > 0 ? behavioralQuestions : genericQuestions
+
   return interviewReportSchema.parse({
     title: String(getField(raw, 'title', ['jobTitle', 'reportTitle', 'job_title', 'report_title']) ?? 'Untitled Position').trim() || 'Untitled Position',
     matchScore: typeof getField(raw, 'matchScore', ['score', 'match_score']) === 'number'
       ? getField(raw, 'matchScore', ['score', 'match_score'])
       : Number(getField(raw, 'matchScore', ['score', 'match_score'])) || 0,
-    technicalQuestions: technicalQuestions.length > 0 ? technicalQuestions : genericQuestions,
-    behavioralQuestions,
+    technicalQuestions: normalizedTechnicalQuestions,
+    behavioralQuestions: normalizedBehavioralQuestions,
     skillGaps: normalizeArray(getField(raw, 'skillGaps', ['skill_gaps', 'gaps', 'skills', 'missingSkills', 'skillGap', 'skill_gap', 'missing_skills']), normalizeSkillGap),
   })
 }

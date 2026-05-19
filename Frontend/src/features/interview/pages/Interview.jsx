@@ -49,8 +49,9 @@ const Interview = () => {
   if (!report) return <main className='loading-screen'><h1>No report loaded</h1><p>Please generate a report or select one from Recent Reports.</p></main>
 
   const score = Number(report.matchScore) || 0
-  const technicalQuestions = report.technicalQuestions || report.questions || []
-  const behavioralQuestions = report.behavioralQuestions || []
+  const genericQuestions = report.questions || report.interviewQuestions || report.interview_questions || []
+  const technicalQuestions = report.technicalQuestions || genericQuestions || []
+  const behavioralQuestions = report.behavioralQuestions || genericQuestions || []
   const skillGaps = report.skillGaps || report.skill_gaps || report.gaps || report.missingSkills || []
 
   return (
@@ -76,13 +77,17 @@ const Interview = () => {
           {activeNav === 'technical' && (
             <section>
               <div className='content-header'><h2>Technical Questions</h2><span className='content-header__count'>{technicalQuestions.length} questions</span></div>
-              <div className='q-list'>{technicalQuestions.map((q, idx) => <QuestionCard key={idx} item={q} index={idx} />)}</div>
+              <div className='q-list'>
+                {technicalQuestions.length > 0 ? technicalQuestions.map((q, idx) => <QuestionCard key={idx} item={q} index={idx} />) : <div className='q-card__empty'>No technical questions are available yet. Try regenerating your report.</div>}
+              </div>
             </section>
           )}
           {activeNav === 'behavioral' && (
             <section>
               <div className='content-header'><h2>Behavioral Questions</h2><span className='content-header__count'>{behavioralQuestions.length} questions</span></div>
-              <div className='q-list'>{behavioralQuestions.map((q, idx) => <QuestionCard key={idx} item={q} index={idx} />)}</div>
+              <div className='q-list'>
+                {behavioralQuestions.length > 0 ? behavioralQuestions.map((q, idx) => <QuestionCard key={idx} item={q} index={idx} />) : <div className='q-card__empty'>No behavioral questions are available yet. Try regenerating your report.</div>}
+              </div>
             </section>
           )}
         </main>
