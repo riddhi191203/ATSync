@@ -9,18 +9,22 @@ const api = axios.create({
 /**
  * @description Service to generate interview report based on user self description, resume and job description.
  */
-export const generateInterviewReport = async ({ jobDescription, selfDescription, resumeFile }) => {
+export const generateInterviewReport = async ({ jobDescription, selfDescription, resumeFile, resume }) => {
+    const file = resumeFile || resume
 
     const formData = new FormData()
     formData.append("jobDescription", jobDescription)
     formData.append("selfDescription", selfDescription)
-    formData.append("resume", resumeFile)
 
-    const response = await api.post("/api/interview/", formData, {
-        headers: {
-            "Content-Type": "multipart/form-data"
+    if (file) {
+        const allowedTypes = ["application/pdf"]
+        if (!allowedTypes.includes(file.type)) {
+            throw new Error("Only PDF resumes are supported. Please upload a valid PDF file.")
         }
-    })
+        formData.append("resume", file)
+    }
+
+    const response = await api.post("/api/interview/", formData)
 
     return response.data
 

@@ -237,6 +237,24 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
         color: $text-muted;
         margin: 0;
     }
+
+    &__filename {
+        margin: 0.5rem 0 0;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: $accent;
+    }
+}
+
+.dropzone--active {
+    border-color: $accent;
+    background-color: rgba($accent, 0.12);
+}
+
+.upload-error {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #ff6b6b;
 }
 
 // ── OR Divider ────────────────────────────────────────────────────────────────
@@ -301,7 +319,7 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem 1.5rem;
-    background: linear-gradient(135deg, $accent 0%, darken($accent, 10%) 100%);
+    background: linear-gradient(135deg, $accent 0%, adjust-color($accent, $lightness: -10%) 100%);
     color: #fff;
     font-size: 0.9rem;
     font-weight: 600;
