@@ -46,23 +46,23 @@ const scoreTheme = (score) => {
       ring: "#10b981",
       badge:
         "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20",
-      text: "Strong role compatibility",
+      text: "Strong Role Compatibility",
     }
 
   if (score >= 60)
     return {
-      ring: "#f59e0b",
+      ring: "#fbbf24",
       badge:
         "bg-amber-500/10 text-amber-300 border border-amber-500/20",
-      text: "Good potential with improvements",
+      text: "Good Potential With Improvements",
     }
 
   return {
     ring: "#f43f5e",
     badge:
       "bg-rose-500/10 text-rose-300 border border-rose-500/20",
-    text: "More preparation required",
-  }
+      text: "More Preparation Required",
+    }
 }
 
 const QuestionCard = ({
@@ -291,13 +291,11 @@ const Interview = () => {
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"></div>
 
         <h1 className="mt-6 text-2xl font-bold text-white">
-          ATSync AI is preparing
-          your interview dashboard...
+          ATSync AI is preparing your interview dashboard...
         </h1>
 
         <p className="mt-2 text-sm text-slate-400">
-          Generating questions,
-          skill gaps and roadmap.
+          Generating questions, skill gaps and roadmap.
         </p>
       </main>
     )
@@ -359,7 +357,7 @@ const Interview = () => {
             </div>
           </div>
 
-          {/* User */}
+          {/* USER */}
           <div
             className="relative"
             ref={userMenuRef}
@@ -402,7 +400,7 @@ const Interview = () => {
 
       {/* CONTENT */}
       <main className="mx-auto max-w-7xl px-6 py-10">
-        {/* Header */}
+        {/* HEADER */}
         <section className="mb-12">
           <div className="mb-5 flex items-center gap-3">
             <span className="text-xs uppercase tracking-[0.2em] text-sky-400">
@@ -421,11 +419,8 @@ const Interview = () => {
               </h1>
 
               <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-400">
-                AI-generated
-                interview questions,
-                preparation roadmap,
-                and ATS insights for
-                your target role.
+                AI-generated interview questions, preparation roadmap,
+                and ATS insights for your target role.
               </p>
             </div>
 
@@ -442,18 +437,21 @@ const Interview = () => {
           </div>
         </section>
 
-        {/* Layout */}
-        <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
-          {/* Main */}
+        {/* LAYOUT */}
+        <div className="grid gap-8 lg:grid-cols-[1fr_420px]">
+          {/* MAIN */}
           <div className="rounded-3xl border border-slate-800 bg-[#0f172a] p-8 shadow-2xl">
             {activeTab !==
             "roadmap" ? (
               <>
                 <div className="mb-8 flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-white">
-                    {
-                      activeTab
-                    }{" "}
+                    {activeTab.charAt(
+                      0
+                    ).toUpperCase() +
+                      activeTab.slice(
+                        1
+                      )}{" "}
                     Questions
                   </h2>
 
@@ -464,7 +462,7 @@ const Interview = () => {
                       ]
                         ?.length
                     }{" "}
-                    questions
+                    Questions
                   </span>
                 </div>
 
@@ -495,8 +493,7 @@ const Interview = () => {
               <>
                 <div className="mb-8 flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-white">
-                    Preparation
-                    Roadmap
+                    Preparation Roadmap
                   </h2>
 
                   <span className="text-sm text-slate-500">
@@ -505,7 +502,7 @@ const Interview = () => {
                         .preparationPlan
                         ?.length
                     }{" "}
-                    days
+                    Days
                   </span>
                 </div>
 
@@ -529,35 +526,40 @@ const Interview = () => {
             )}
           </div>
 
-          {/* Sidebar */}
+          {/* SIDEBAR */}
           <aside className="space-y-8">
-            {/* Match Score */}
-            <section className="rounded-3xl border border-slate-800 bg-[#0f172a] p-6 shadow-2xl">
-              <div className="mb-6 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">
+            {/* MATCH SCORE */}
+            <section className="overflow-hidden rounded-[32px] border border-slate-800 bg-[#071226] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+              {/* HEADER */}
+              <div className="mb-8 flex items-center justify-between">
+                <h3 className="text-3xl font-black tracking-tight text-white">
                   Match Score
                 </h3>
 
-                <span className="text-sm text-slate-500">
+                <span className="text-xl font-medium text-slate-500">
                   ATS
                 </span>
               </div>
 
-              <div className="mb-6 flex items-center gap-5">
-                <div className="relative h-24 w-24">
+              {/* BODY */}
+              <div className="flex flex-col items-center gap-8">
+                {/* SCORE CIRCLE */}
+                <div className="relative flex h-[190px] w-[190px] items-center justify-center">
                   <svg
                     viewBox="0 0 100 100"
                     className="-rotate-90"
                   >
+                    {/* BG */}
                     <circle
                       cx="50"
                       cy="50"
                       r="42"
                       fill="none"
                       stroke="#1e293b"
-                      strokeWidth="8"
+                      strokeWidth="7"
                     />
 
+                    {/* PROGRESS */}
                     <circle
                       cx="50"
                       cy="50"
@@ -566,7 +568,7 @@ const Interview = () => {
                       stroke={
                         score.ring
                       }
-                      strokeWidth="8"
+                      strokeWidth="7"
                       strokeLinecap="round"
                       strokeDasharray={`${
                         (report.matchScore /
@@ -576,27 +578,50 @@ const Interview = () => {
                     />
                   </svg>
 
+                  {/* TEXT */}
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-black text-white">
-                      {
-                        report.matchScore
-                      }
-                      %
-                    </span>
+                    <div className="flex items-start">
+                      <span className="text-[50px] font-black leading-none tracking-tight text-white">
+                        {
+                          report.matchScore
+                        }
+                      </span>
+
+                      <span className="mt-1 text-[28px] font-bold text-white">
+                        %
+                      </span>
+                    </div>
                   </div>
                 </div>
 
+                {/* AI CARD */}
                 <div
-                  className={`rounded-2xl px-4 py-3 text-sm ${score.badge}`}
+                  className={`w-full rounded-[30px] border px-6 py-6 ${score.badge}`}
                 >
-                  {
-                    score.text
-                  }
+                  <div className="flex items-center gap-5">
+                    {/* ICON */}
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-black/10">
+                      <span className="material-symbols-outlined text-[32px]">
+                        trending_up
+                      </span>
+                    </div>
+
+                    {/* CONTENT */}
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p className="mb-2 text-[11px] uppercase tracking-[0.3em] opacity-60">
+                        AI Evaluation
+                      </p>
+
+                      <h4 className="break-words text-[20px] font-semibold leading-snug lg:text-[22px]">
+                        {score.text}
+                      </h4>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
 
-            {/* Skill Gaps */}
+            {/* SKILL GAPS */}
             <section className="rounded-3xl border border-slate-800 bg-[#0f172a] p-6 shadow-2xl">
               <div className="mb-5 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-white">
@@ -609,7 +634,7 @@ const Interview = () => {
                       .skillGaps
                       ?.length
                   }{" "}
-                  gaps
+                  Gaps
                 </span>
               </div>
 
@@ -634,7 +659,7 @@ const Interview = () => {
               </div>
             </section>
 
-            {/* Quote */}
+            {/* QUOTE */}
             <section className="relative overflow-hidden rounded-3xl border border-slate-800 bg-[#0f172a] p-6 shadow-2xl">
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-500 via-cyan-400 to-sky-500"></div>
 
@@ -677,7 +702,7 @@ const Interview = () => {
         </div>
       </main>
 
-      {/* Footer */}
+      {/* FOOTER */}
       <footer className="mt-16 border-t border-slate-800 py-8">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6">
           <span className="text-lg font-bold text-white">
