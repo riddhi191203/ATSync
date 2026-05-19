@@ -17,7 +17,7 @@ const QuestionCard = ({ item, index }) => {
     <div className='q-card'>
       <button type='button' className='q-card__header' onClick={() => setOpen((value) => !value)}>
         <span className='q-card__index'>Q{index + 1}</span>
-        <p className='q-card__question'>{first(item, ['question', 'q', 'prompt'], 'No question provided')}</p>
+        <p className='q-card__question'>{first(item, ['question', 'questionText', 'question_text', 'q', 'prompt'], 'No question provided')}</p>
         <span className={`q-card__chevron ${open ? 'q-card__chevron--open' : ''}`}>
           <svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='6 9 12 15 18 9' /></svg>
         </span>
@@ -26,11 +26,11 @@ const QuestionCard = ({ item, index }) => {
         <div className='q-card__body'>
           <div className='q-card__section'>
             <span className='q-card__tag q-card__tag--intention'>Intention</span>
-            <p>{first(item, ['intention', 'intent'], 'No intention provided')}</p>
+            <p>{first(item, ['intention', 'intent', 'purpose', 'reason', 'goal'], 'No intention provided')}</p>
           </div>
           <div className='q-card__section'>
             <span className='q-card__tag q-card__tag--answer'>Model Answer</span>
-            <p>{first(item, ['answer', 'response'], 'No answer provided')}</p>
+            <p>{first(item, ['answer', 'response', 'recommendation', 'solution', 'advice', 'explanation'], 'No answer provided')}</p>
           </div>
         </div>
       )}
@@ -49,10 +49,31 @@ const Interview = () => {
   if (!report) return <main className='loading-screen'><h1>No report loaded</h1><p>Please generate a report or select one from Recent Reports.</p></main>
 
   const score = Number(report.matchScore) || 0
-  const genericQuestions = report.questions || report.interviewQuestions || report.interview_questions || []
-  const technicalQuestions = report.technicalQuestions || genericQuestions || []
-  const behavioralQuestions = report.behavioralQuestions || genericQuestions || []
-  const skillGaps = report.skillGaps || report.skill_gaps || report.gaps || report.missingSkills || []
+  const genericQuestions = Array.isArray(report.questions)
+    ? report.questions
+    : Array.isArray(report.interviewQuestions)
+      ? report.interviewQuestions
+      : Array.isArray(report.interview_questions)
+        ? report.interview_questions
+        : []
+
+  const technicalQuestions = (Array.isArray(report.technicalQuestions) && report.technicalQuestions.length > 0)
+    ? report.technicalQuestions
+    : genericQuestions
+
+  const behavioralQuestions = (Array.isArray(report.behavioralQuestions) && report.behavioralQuestions.length > 0)
+    ? report.behavioralQuestions
+    : genericQuestions
+
+  const skillGaps = Array.isArray(report.skillGaps) && report.skillGaps.length > 0
+    ? report.skillGaps
+    : Array.isArray(report.skill_gaps) && report.skill_gaps.length > 0
+      ? report.skill_gaps
+      : Array.isArray(report.gaps) && report.gaps.length > 0
+        ? report.gaps
+        : Array.isArray(report.missingSkills)
+          ? report.missingSkills
+          : []
 
   return (
     <div className='interview-page'>
