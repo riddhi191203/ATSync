@@ -11,6 +11,92 @@ const NAV_ITEMS = [
 const getScoreClass = (score) => (score >= 80 ? 'score--high' : score >= 60 ? 'score--mid' : 'score--low')
 const first = (item, keys, fallback = '') => keys.map((key) => item?.[key]).find(Boolean) || fallback
 
+const normalizeReportArray = (value) => {
+  if (Array.isArray(value)) return value
+  if (!value) return []
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  if (typeof value === 'object') return [value]
+  return []
+}
+
+const normalizeQuestions = (report) => {
+  const candidates = [
+    report.technicalQuestions,
+    report.technical_questions,
+    report.technical,
+    report.techQuestions,
+    report.tech_questions,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeReportArray(candidate)
+    if (normalized.length > 0) return normalized
+  }
+
+  return []
+}
+
+const normalizeBehavioralQuestions = (report) => {
+  const candidates = [
+    report.behavioralQuestions,
+    report.behavioral_questions,
+    report.behavioural_questions,
+    report.behavioral,
+    report.behavior_questions,
+    report.behavior_questions,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeReportArray(candidate)
+    if (normalized.length > 0) return normalized
+  }
+
+  return []
+}
+
+const normalizeGenericQuestions = (report) => {
+  const candidates = [
+    report.questions,
+    report.qa,
+    report.interviewQuestions,
+    report.interview_questions,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeReportArray(candidate)
+    if (normalized.length > 0) return normalized
+  }
+
+  return []
+}
+
+const normalizeSkillGaps = (report) => {
+  const candidates = [
+    report.skillGaps,
+    report.skill_gaps,
+    report.gaps,
+    report.skills,
+    report.missingSkills,
+    report.skillGap,
+    report.skill_gap,
+    report.missing_skills,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeReportArray(candidate)
+    if (normalized.length > 0) return normalized
+  }
+
+  return []
+}
+
 const QuestionCard = ({ item, index }) => {
   const [open, setOpen] = useState(false)
   return (
@@ -49,31 +135,10 @@ const Interview = () => {
   if (!report) return <main className='loading-screen'><h1>No report loaded</h1><p>Please generate a report or select one from Recent Reports.</p></main>
 
   const score = Number(report.matchScore) || 0
-  const genericQuestions = Array.isArray(report.questions)
-    ? report.questions
-    : Array.isArray(report.interviewQuestions)
-      ? report.interviewQuestions
-      : Array.isArray(report.interview_questions)
-        ? report.interview_questions
-        : []
-
-  const technicalQuestions = (Array.isArray(report.technicalQuestions) && report.technicalQuestions.length > 0)
-    ? report.technicalQuestions
-    : genericQuestions
-
-  const behavioralQuestions = (Array.isArray(report.behavioralQuestions) && report.behavioralQuestions.length > 0)
-    ? report.behavioralQuestions
-    : genericQuestions
-
-  const skillGaps = Array.isArray(report.skillGaps) && report.skillGaps.length > 0
-    ? report.skillGaps
-    : Array.isArray(report.skill_gaps) && report.skill_gaps.length > 0
-      ? report.skill_gaps
-      : Array.isArray(report.gaps) && report.gaps.length > 0
-        ? report.gaps
-        : Array.isArray(report.missingSkills)
-          ? report.missingSkills
-          : []
+  const genericQuestions = normalizeGenericQuestions(report)
+  const technicalQuestions = normalizeQuestions(report).length > 0 ? normalizeQuestions(report) : genericQuestions
+  const behavioralQuestions = normalizeBehavioralQuestions(report).length > 0 ? normalizeBehavioralQuestions(report) : genericQuestions
+  const skillGaps = normalizeSkillGaps(report)
 
   return (
     <div className='interview-page'>
