@@ -3,7 +3,7 @@ import axios from "axios"
 const AUTH_TOKEN_KEY = "resume_ai_token"
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:3000"
+  import.meta.env.VITE_API_URL || "http://localhost:5000"
 
 export const getAuthToken = () => {
   if (typeof window === "undefined") return null
