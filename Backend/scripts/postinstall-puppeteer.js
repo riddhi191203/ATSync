@@ -1,62 +1,53 @@
+const { execSync } = require("child_process")
 const fs = require("fs")
-const { spawnSync } = require("child_process")
 
-const pathExists = (filePath) => {
-    if (!filePath) {
-        return false
-    }
+const CACHE_DIR = "/opt/render/.cache/puppeteer"
+
+const pathExists = (path) => {
     try {
-        return fs.existsSync(filePath)
+        return fs.existsSync(path)
     } catch {
         return false
     }
 }
 
-const resolveExecutablePath = () => {
-    if (pathExists(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-        return process.env.PUPPETEER_EXECUTABLE_PATH
-    }
-
+const browserAlreadyInstalled = () => {
     try {
         const puppeteer = require("puppeteer")
         const executablePath = puppeteer.executablePath()
-        return pathExists(executablePath) ? executablePath : null
+
+        return executablePath && pathExists(executablePath)
     } catch {
-        return null
+        return false
     }
 }
 
-const existingExecutable = resolveExecutablePath()
+try {
 
-if (existingExecutable) {
-    console.log(`[postinstall] Puppeteer browser already available: ${existingExecutable}`)
-    process.exit(0)
-}
-
-console.log("[postinstall] Installing Chrome for Puppeteer...")
-
-const command = process.platform === "win32" ? "npx.cmd" : "npx"
-const args = [
-  "puppeteer",
-  "browsers",
-  "install",
-  "chrome",
-  "--path",
-  "/opt/render/.cache/puppeteer"
-]
-const result = spawnSync(command, args, { stdio: "inherit" })
-
-if (result.status === 0) {
-    const installedExecutable = resolveExecutablePath()
-    if (installedExecutable) {
-        console.log(`[postinstall] Puppeteer browser installed: ${installedExecutable}`)
-    } else {
-        console.log("[postinstall] Puppeteer install finished.")
+    if (browserAlreadyInstalled()) {
+        console.log("[postinstall] Chrome already installed.")
+        process.exit(0)
     }
-    process.exit(0)
-}
 
-console.warn("[postinstall] Chrome download failed, but install will continue.")
-console.warn("[postinstall] PDF generation requires a browser binary.")
-console.warn("[postinstall] If needed, set PUPPETEER_EXECUTABLE_PATH in Backend/.env.")
-process.exit(0)
+    console.log("[postinstall] Installing Chrome for Puppeteer...")
+
+    process.env.PUPPETEER_CACHE_DIR = CACHE_DIR
+
+    execSync(
+        `npx puppeteer browsers install chrome --path=${CACHE_DIR}`,
+        {
+            stdio: "inherit"
+        }
+    )
+
+    console.log("[postinstall] Chrome installed successfully!")
+
+    process.exit(0)
+
+} catch (error) {
+
+    console.error("[postinstall] Failed to install Chrome")
+    console.error(error)
+
+    process.exit(1)
+}
