@@ -1,7 +1,8 @@
 const { execFileSync } = require("child_process")
 const path = require("path")
 
-const cacheDirectory = path.join(__dirname, "..", ".cache", "puppeteer")
+const cacheDirectory = process.env.PUPPETEER_CACHE_DIR
+    || path.join(__dirname, "..", ".cache", "puppeteer")
 const puppeteerCli = require.resolve("puppeteer/lib/cjs/puppeteer/node/cli.js")
 
 try {

@@ -90,7 +90,9 @@ const resolveChromeExecutablePath = () => {
     }
 
     try {
-        return puppeteer.executablePath()
+        const bundledBrowserPath = puppeteer.executablePath()
+
+        return fs.existsSync(bundledBrowserPath) ? bundledBrowserPath : undefined
     } catch (error) {
         return undefined
     }
@@ -276,7 +278,7 @@ async function generatePdfFromHtml(htmlContent) {
 
         if (/Could not find Chrome|Browser was not found/i.test(error.message)) {
             throw new Error(
-                `Chrome is not installed for Puppeteer. Run "npm install" in the Backend directory during deployment so the postinstall script can download Chrome into ${process.env.PUPPETEER_CACHE_DIR}. Original error: ${error.message}`
+                `Chrome is not installed for Puppeteer. Run "npm install" in the Backend directory during deployment so the postinstall script can download Chrome into ${process.env.PUPPETEER_CACHE_DIR}. If this is running on Render, make sure the service root directory is Backend and the build command runs npm install without PUPPETEER_SKIP_DOWNLOAD=true. Original error: ${error.message}`
             )
         }
 
