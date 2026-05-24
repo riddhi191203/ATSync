@@ -1,40 +1,11 @@
 const { execSync } = require("child_process")
-const fs = require("fs")
-
-const CACHE_DIR = "/opt/render/.cache/puppeteer"
-
-const pathExists = (path) => {
-    try {
-        return fs.existsSync(path)
-    } catch {
-        return false
-    }
-}
-
-const browserAlreadyInstalled = () => {
-    try {
-        const puppeteer = require("puppeteer")
-        const executablePath = puppeteer.executablePath()
-
-        return executablePath && pathExists(executablePath)
-    } catch {
-        return false
-    }
-}
 
 try {
 
-    if (browserAlreadyInstalled()) {
-        console.log("[postinstall] Chrome already installed.")
-        process.exit(0)
-    }
-
     console.log("[postinstall] Installing Chrome for Puppeteer...")
 
-    process.env.PUPPETEER_CACHE_DIR = CACHE_DIR
-
     execSync(
-        `npx puppeteer browsers install chrome --path=${CACHE_DIR}`,
+        "npx puppeteer browsers install chrome",
         {
             stdio: "inherit"
         }
