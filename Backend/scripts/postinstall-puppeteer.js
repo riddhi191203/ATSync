@@ -36,7 +36,14 @@ if (existingExecutable) {
 console.log("[postinstall] Installing Chrome for Puppeteer...")
 
 const command = process.platform === "win32" ? "npx.cmd" : "npx"
-const args = [ "puppeteer", "browsers", "install", "chrome", "--path", "./.cache/puppeteer" ]
+const args = [
+  "puppeteer",
+  "browsers",
+  "install",
+  "chrome",
+  "--path",
+  "/opt/render/.cache/puppeteer"
+]
 const result = spawnSync(command, args, { stdio: "inherit" })
 
 if (result.status === 0) {
