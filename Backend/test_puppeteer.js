@@ -5,7 +5,6 @@ const puppeteer = require('puppeteer');
         const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
         console.log("Executable Path:", executablePath);
         const browser = await puppeteer.launch({
-            executablePath,
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox"]
         });
