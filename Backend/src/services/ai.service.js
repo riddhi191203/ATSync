@@ -1,6 +1,12 @@
 const { GoogleGenAI } = require("@google/genai")
+const fs = require("fs")
+const path = require("path")
 const { z } = require("zod")
 const { zodToJsonSchema } = require("zod-to-json-schema")
+
+process.env.PUPPETEER_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR
+    || path.join(__dirname, "..", "..", ".cache", "puppeteer")
+
 const puppeteer = require("puppeteer")
 
 const ai = new GoogleGenAI({
@@ -63,6 +69,49 @@ const ensureRoadmapLength = (plan, targetDays) => {
     }
 
     return trimmed
+}
+
+const chromeExecutableCandidates = () => [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.GOOGLE_CHROME_BIN,
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium"
+].filter(Boolean)
+
+const resolveChromeExecutablePath = () => {
+    const installedBrowserPath = chromeExecutableCandidates().find((candidate) =>
+        fs.existsSync(candidate)
+    )
+
+    if (installedBrowserPath) {
+        return installedBrowserPath
+    }
+
+    try {
+        return puppeteer.executablePath()
+    } catch (error) {
+        return undefined
+    }
+}
+
+const buildPuppeteerLaunchOptions = () => {
+    const executablePath = resolveChromeExecutablePath()
+
+    return {
+        headless: true,
+        ...(executablePath ? { executablePath } : {}),
+
+        args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-zygote",
+            "--disable-extensions"
+        ]
+    }
 }
 
 const interviewReportSchema = z.object({
@@ -197,21 +246,13 @@ async function generatePdfFromHtml(htmlContent) {
 
     try {
 
-        browser = await puppeteer.launch({
-            headless: true,
-
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu"
-            ]
-        })
+        browser = await puppeteer.launch(buildPuppeteerLaunchOptions())
 
         const page = await browser.newPage()
 
         await page.setContent(htmlContent, {
-            waitUntil: "networkidle0"
+            waitUntil: ["domcontentloaded", "networkidle0"],
+            timeout: 30000
         })
 
         const pdfBuffer = await page.pdf({
@@ -232,12 +273,21 @@ async function generatePdfFromHtml(htmlContent) {
     } catch (error) {
 
         console.error("PDF Generation Error:", error)
+
+        if (/Could not find Chrome|Browser was not found/i.test(error.message)) {
+            throw new Error(
+                `Chrome is not installed for Puppeteer. Run "npm install" in the Backend directory during deployment so the postinstall script can download Chrome into ${process.env.PUPPETEER_CACHE_DIR}. Original error: ${error.message}`
+            )
+        }
+
         throw error
 
     } finally {
 
         if (browser) {
-            await browser.close()
+            await browser.close().catch((error) => {
+                console.error("Failed to close Puppeteer browser:", error)
+            })
         }
     }
 }

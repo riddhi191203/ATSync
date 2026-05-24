@@ -1,13 +1,23 @@
-const { execSync } = require("child_process")
+const { execFileSync } = require("child_process")
+const path = require("path")
+
+const cacheDirectory = path.join(__dirname, "..", ".cache", "puppeteer")
+const puppeteerCli = require.resolve("puppeteer/lib/cjs/puppeteer/node/cli.js")
 
 try {
 
     console.log("[postinstall] Installing Chrome for Puppeteer...")
+    console.log(`[postinstall] Puppeteer cache: ${cacheDirectory}`)
 
-    execSync(
-        "npx puppeteer browsers install chrome",
+    execFileSync(
+        process.execPath,
+        [puppeteerCli, "browsers", "install", "chrome"],
         {
-            stdio: "inherit"
+            stdio: "inherit",
+            env: {
+                ...process.env,
+                PUPPETEER_CACHE_DIR: cacheDirectory
+            }
         }
     )
 
