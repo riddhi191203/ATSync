@@ -287,16 +287,18 @@ const Interview = () => {
 
   if (loading || !report) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-[#020617]">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"></div>
-
-        <h1 className="mt-6 text-2xl font-bold text-white">
-          ATSync AI is preparing your interview dashboard...
-        </h1>
-
-        <p className="mt-2 text-sm text-slate-400">
-          Generating questions, skill gaps and roadmap.
-        </p>
+      <main className="flex min-h-screen items-center justify-center bg-[#020617] px-6">
+        <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"></div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white leading-snug">
+              ATSync AI is preparing your interview dashboard...
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Generating questions, skill gaps and roadmap.
+            </p>
+          </div>
+        </div>
       </main>
     )
   }

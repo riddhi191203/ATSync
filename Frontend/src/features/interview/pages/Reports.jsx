@@ -52,9 +52,11 @@ const Reports = () => {
 
     if (loading) {
         return (
-            <main className="flex min-h-screen flex-col items-center justify-center bg-[#020617]">
-                <div className="h-12 w-12 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"></div>
-                <h1 className="mt-6 text-2xl font-bold text-white">Loading reports...</h1>
+            <main className="flex min-h-screen items-center justify-center bg-[#020617] px-6">
+                <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
+                    <div className="h-12 w-12 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"></div>
+                    <h1 className="text-xl sm:text-2xl font-bold text-white leading-snug">Loading reports...</h1>
+                </div>
             </main>
         )
     }
