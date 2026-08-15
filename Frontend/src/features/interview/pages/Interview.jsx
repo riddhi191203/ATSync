@@ -100,7 +100,7 @@ const QuestionCard = ({
       </button>
 
       {open && (
-        <div className="space-y-5 pb-6 pl-14">
+        <div className="space-y-5 pb-6 pl-4 sm:pl-14">
           <div className="border-l-2 border-violet-500 pl-4">
             <span className="mb-1 block text-[10px] uppercase tracking-widest text-violet-300">
               Intention
@@ -412,7 +412,7 @@ const Interview = () => {
 
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
             <div>
-              <h1 className="text-5xl font-black leading-tight tracking-tight md:text-6xl">
+              <h1 className="text-3xl sm:text-4xl md:text-6xl font-black leading-tight tracking-tight">
                 {
                   report.title
                 }
@@ -430,12 +430,71 @@ const Interview = () => {
                   interviewId
                 )
               }
-              className="rounded-2xl bg-sky-500 px-6 py-4 font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:bg-sky-400"
+              className="w-full sm:w-auto rounded-2xl bg-sky-500 px-6 py-4 font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:bg-sky-400 cursor-pointer"
             >
               Download Resume PDF
             </button>
           </div>
         </section>
+
+        {/* Mobile Match Score */}
+        <div className="mb-8 lg:hidden">
+          <section className="overflow-hidden rounded-[32px] border border-slate-800 bg-[#071226] p-6 sm:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-2xl font-black tracking-tight text-white">
+                Match Score
+              </h3>
+              <span className="text-lg font-medium text-slate-500">
+                ATS
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
+              <div className="relative flex h-[140px] w-[140px] shrink-0 items-center justify-center">
+                <svg viewBox="0 0 100 100" className="-rotate-90">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#1e293b" strokeWidth="7" />
+                  <circle cx="50" cy="50" r="42" fill="none" stroke={score.ring} strokeWidth="7" strokeLinecap="round" strokeDasharray={`${(report.matchScore / 100) * 264} 264`} />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex items-start">
+                    <span className="text-[36px] font-black leading-none tracking-tight text-white">{report.matchScore}</span>
+                    <span className="mt-0.5 text-[20px] font-bold text-white">%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`w-full rounded-[24px] border px-5 py-4 ${score.badge}`}>
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/10">
+                    <span className="material-symbols-outlined text-[24px]">trending_up</span>
+                  </div>
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <p className="mb-1 text-[9px] uppercase tracking-[0.3em] opacity-60">AI Evaluation</p>
+                    <h4 className="text-[16px] sm:text-[18px] font-semibold leading-snug break-words">{score.text}</h4>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* Mobile Tab switcher */}
+        <div className="mb-6 flex overflow-x-auto rounded-2xl bg-[#0f172a] p-1.5 border border-slate-800 md:hidden scrollbar-none">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition shrink-0 cursor-pointer ${
+                activeTab === item.id
+                  ? "bg-sky-500 text-white shadow-lg shadow-sky-500/20"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px]">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
 
         {/* LAYOUT */}
         <div className="grid gap-8 lg:grid-cols-[1fr_420px]">

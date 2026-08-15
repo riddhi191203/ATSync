@@ -62,6 +62,19 @@ const Home = () => {
   const [quoteLoading, setQuoteLoading] =
     useState(false)
 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const reportsSectionRef = useRef(null)
+
+  const handleScrollToReports = () => {
+    setIsMobileMenuOpen(false)
+    reportsSectionRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const handleScrollToDashboard = () => {
+    setIsMobileMenuOpen(false)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
   const filteredReports = (reports || []).filter(
     (report) => {
       const query = searchQuery.toLowerCase()
@@ -179,16 +192,25 @@ const Home = () => {
       <nav className="sticky top-0 z-50 border-b border-slate-800 bg-[#020617]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-10">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <button
+              onClick={handleScrollToDashboard}
+              className="text-2xl font-bold tracking-tight text-white bg-transparent border-none cursor-pointer"
+            >
               ATSync
-            </h1>
+            </button>
 
             <div className="hidden items-center gap-6 md:flex">
-              <button className="text-sm font-semibold text-sky-400">
+              <button
+                onClick={handleScrollToDashboard}
+                className="text-sm font-semibold text-sky-400 cursor-pointer"
+              >
                 Dashboard
               </button>
 
-              <button className="text-sm text-slate-400 transition hover:text-white">
+              <button
+                onClick={handleScrollToReports}
+                className="text-sm text-slate-400 transition hover:text-white cursor-pointer"
+              >
                 Reports
               </button>
             </div>
@@ -216,14 +238,66 @@ const Home = () => {
 
               <button
                 onClick={handleLogout}
-                className="rounded-xl border border-slate-700 bg-[#0f172a] px-4 py-2 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+                className="hidden rounded-xl border border-slate-700 bg-[#0f172a] px-4 py-2 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white md:block"
               >
                 Logout
               </button>
             </div>
+
+            {/* Hamburger Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-[#0f172a] text-slate-300 transition hover:border-slate-600 md:hidden cursor-pointer"
+            >
+              <span className="material-symbols-outlined">
+                {isMobileMenuOpen ? "close" : "menu"}
+              </span>
+            </button>
           </div>
         </div>
-      </nav>
+
+        {/* Mobile Menu Drawer */}
+        {isMobileMenuOpen && (
+          <div className="border-t border-slate-800 bg-[#020617] px-6 py-4 space-y-4 md:hidden animate-fade-up">
+            {/* Mobile Search */}
+            <div>
+              <input
+                type="text"
+                placeholder="Search reports..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-[#0f172a] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-500"
+              />
+            </div>
+
+            {/* Mobile Nav Links */}
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleScrollToDashboard}
+                className="flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-sky-400 hover:bg-slate-800 w-full cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">dashboard</span>
+                Dashboard
+              </button>
+
+              <button
+                onClick={handleScrollToReports}
+                className="flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-white w-full cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">description</span>
+                Reports
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-rose-400 hover:bg-rose-500/10 w-full cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+                Logout ({user?.username})
+              </button>
+            </div>
+          </div>
+        )}</nav>
 
       {/* Main */}
       <main className="mx-auto max-w-7xl px-6 py-10">
@@ -239,7 +313,7 @@ const Home = () => {
 
           <div className="flex flex-col justify-between gap-10 lg:flex-row lg:items-end">
             <div>
-              <h1 className="text-5xl font-black leading-tight tracking-tight text-white md:text-6xl">
+              <h1 className="text-4xl xs:text-5xl font-black leading-tight tracking-tight text-white md:text-6xl">
                 Analyze Your <br />
                 Resume With AI.
               </h1>
@@ -307,7 +381,7 @@ const Home = () => {
                   )
                 }
                 placeholder="Paste job description here..."
-                className="w-full rounded-2xl border border-slate-700 bg-[#020617] p-5 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-500"
+                className="w-full rounded-2xl border border-slate-700 bg-[#020617] p-4 sm:p-5 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-500"
               />
 
               <div className="mt-3 flex justify-between text-xs text-slate-500">
@@ -330,7 +404,7 @@ const Home = () => {
                 Upload Resume
               </h2>
 
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-700 bg-[#020617] p-12 transition hover:border-sky-500 hover:bg-slate-900">
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-700 bg-[#020617] p-6 sm:p-12 transition hover:border-sky-500 hover:bg-slate-900">
                 <span className="material-symbols-outlined mb-4 text-5xl text-sky-400">
                   upload_file
                 </span>
@@ -393,7 +467,7 @@ const Home = () => {
           </div>
 
           {/* Sidebar */}
-          <aside>
+          <aside ref={reportsSectionRef}>
             <section className="rounded-3xl border border-slate-800 bg-[#0f172a] p-6 shadow-2xl">
               <div className="mb-5 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-white">

@@ -141,6 +141,16 @@ const Login = () => {
             {/* RIGHT PANEL */}
             <section className="flex flex-1 items-center justify-center px-6 py-10 lg:px-12">
                 <div className="w-full max-w-md">
+                    {/* Mobile Logo */}
+                    <div className="mb-8 lg:hidden">
+                        <Link
+                            to="/"
+                            className="text-3xl font-black tracking-tight text-white"
+                        >
+                            ATSync AI
+                        </Link>
+                    </div>
+
                     {/* Header */}
                     <div className="mb-10">
                         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-sky-300">
