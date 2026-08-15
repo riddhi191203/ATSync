@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react"
-import { useNavigate, useParams } from "react-router"
+import { Link, useNavigate, useParams } from "react-router"
 import { useInterview } from "../hooks/useInterview"
 import { useAuth } from "../../auth/hooks/useAuth"
 import { useSeo } from "../../../shared/seo/useSeo"
@@ -319,9 +319,9 @@ const Interview = () => {
       <nav className="sticky top-0 z-50 border-b border-slate-800 bg-[#020617]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-10">
-            <h1 className="text-2xl font-black tracking-tight">
+            <Link to="/" className="text-2xl font-black tracking-tight text-white hover:opacity-90 transition cursor-pointer">
               ATSync AI
-            </h1>
+            </Link>
 
             <div className="hidden items-center gap-6 md:flex">
               {NAV_ITEMS.map(

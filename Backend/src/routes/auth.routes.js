@@ -36,4 +36,20 @@ authRouter.get("/logout", authController.logoutUserController)
 authRouter.get("/get-me", authMiddleware.authUser, authController.getMeController)
 
 
+/**
+ * @route POST /api/auth/forgot-password
+ * @description initiate forgot password request
+ * @access public
+ */
+authRouter.post("/forgot-password", authController.forgotPasswordController)
+
+
+/**
+ * @route POST /api/auth/reset-password
+ * @description reset user password using token
+ * @access public
+ */
+authRouter.post("/reset-password", authController.resetPasswordController)
+
+
 module.exports = authRouter

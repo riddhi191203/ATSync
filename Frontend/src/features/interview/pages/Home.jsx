@@ -63,11 +63,10 @@ const Home = () => {
     useState(false)
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const reportsSectionRef = useRef(null)
 
   const handleScrollToReports = () => {
     setIsMobileMenuOpen(false)
-    reportsSectionRef.current?.scrollIntoView({ behavior: "smooth" })
+    navigate("/reports")
   }
 
   const handleScrollToDashboard = () => {
@@ -467,7 +466,7 @@ const Home = () => {
           </div>
 
           {/* Sidebar */}
-          <aside ref={reportsSectionRef}>
+          <aside>
             <section className="rounded-3xl border border-slate-800 bg-[#0f172a] p-6 shadow-2xl">
               <div className="mb-5 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-white">

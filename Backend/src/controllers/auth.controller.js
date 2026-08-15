@@ -172,11 +172,109 @@ async function getMeController(req, res) {
 
 }
 
+/**
+ * @name forgotPasswordController
+ * @description generate reset password token and link, expects email in request body
+ * @access Public
+ */
+async function forgotPasswordController(req, res) {
+    try {
+        const { email } = req.body
+
+        if (!email) {
+            return res.status(400).json({
+                message: "Please provide an email address"
+            })
+        }
+
+        const user = await userModel.findOne({ email })
+        if (!user) {
+            return res.status(400).json({
+                message: "No account found with this email address"
+            })
+        }
+
+        // Generate single-use token by incorporating the current hashed password
+        const secret = process.env.JWT_SECRET + user.password
+        const token = jwt.sign(
+            { id: user._id, email: user.email },
+            secret,
+            { expiresIn: "15m" }
+        )
+
+        // Build reset link using VITE_API_URL or CLIENT_URL or fallback
+        const clientUrl = process.env.CLIENT_URL || "http://localhost:5173"
+        const resetLink = `${clientUrl}/reset-password/${user._id}/${token}`
+
+        console.log(`[DEVELOPMENT HELP] Reset Link for ${email}: ${resetLink}`)
+
+        res.status(200).json({
+            message: "Password reset link generated successfully",
+            resetLink,
+            token
+        })
+    } catch (err) {
+        console.error(err)
+        res.status(500).json({
+            message: "Internal server error"
+        })
+    }
+}
+
+/**
+ * @name resetPasswordController
+ * @description reset user password using token, expects userId, token, and newPassword in body
+ * @access Public
+ */
+async function resetPasswordController(req, res) {
+    try {
+        const { userId, token, newPassword } = req.body
+
+        if (!userId || !token || !newPassword) {
+            return res.status(400).json({
+                message: "Missing required fields (userId, token, newPassword)"
+            })
+        }
+
+        const user = await userModel.findById(userId)
+        if (!user) {
+            return res.status(400).json({
+                message: "User not found"
+            })
+        }
+
+        // Verify token using the user's password hash in the secret
+        const secret = process.env.JWT_SECRET + user.password
+        try {
+            jwt.verify(token, secret)
+        } catch (err) {
+            return res.status(400).json({
+                message: "Invalid or expired password reset token"
+            })
+        }
+
+        // Hash new password and update user record
+        const hash = await bcrypt.hash(newPassword, 10)
+        user.password = hash
+        await user.save()
+
+        res.status(200).json({
+            message: "Password reset successfully. You can now login with your new password."
+        })
+    } catch (err) {
+        console.error(err)
+        res.status(500).json({
+            message: "Internal server error"
+        })
+    }
+}
 
 
 module.exports = {
     registerUserController,
     loginUserController,
     logoutUserController,
-    getMeController
+    getMeController,
+    forgotPasswordController,
+    resetPasswordController
 }
